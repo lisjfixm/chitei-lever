@@ -32,6 +32,7 @@
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
   }
   #game{position:relative;width:100%;max-width:420px;height:100vh;height:100dvh;margin:0 auto;overflow:hidden}
+  #game.treeFull{max-width:100%}
   canvas{display:block;width:100%;height:100%;touch-action:none}
 
   /* ---- 頂部單列 HUD：高 44px，左右內縮 10px，中間留空 ---- */
@@ -141,6 +142,49 @@
   .shopRow button:disabled{opacity:.45}
   .shopRow button:not(:disabled){background:var(--coin);color:#1a1410;border-color:var(--coin)}
 
+  /* ---- v4.2 技能樹全屏面板 ---- */
+  #overlay.treeFull{padding:0;display:block}
+  #panel.treeFull{width:100%;height:100%;max-width:100%;max-height:100%;border-radius:0;border:0;background:var(--howto-bg)}
+  #panel.treeFull #panelHead{flex:none}
+  #panel.treeFull #panelBody{overflow:hidden;display:flex;flex-direction:column;padding:0;flex:1}
+  .treePanel{display:flex;flex-direction:column;flex:1;min-height:0}
+  .treeTabs{display:flex;gap:6px;padding:0 16px 10px;flex:none}
+  .treeTabs button{flex:1;min-height:44px;border-radius:10px;border:1px solid rgba(241,230,210,.25);
+    background:rgba(255,255,255,.05);color:var(--fg);font-family:inherit;font-size:14px}
+  .treeTabs button.on{background:var(--coin);color:#1a1410;border-color:var(--coin);font-weight:700}
+  .treeCoin{flex:none;padding:0 16px 10px;font-size:14px;color:var(--coin);font-weight:700}
+  .treeViewport{flex:1;min-height:0;overflow:hidden;position:relative;touch-action:none;cursor:grab}
+  .treeViewport.dragging{cursor:grabbing}
+  .treeCanvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  .treeLinks{position:absolute;top:0;left:0;overflow:visible}
+  .treeLinks path{fill:none;stroke-width:1.6}
+  .treeLinks .linkGold{stroke:var(--coin);stroke-width:2}
+  .treeLinks .linkFaint{stroke:rgba(227,178,60,.4)}
+  .treeLinks .linkGray{stroke:rgba(241,230,210,.28);stroke-dasharray:5 4}
+  .treeNode{position:absolute;width:160px;min-height:76px;border-radius:12px;padding:8px 10px;
+    border:1px solid rgba(241,230,210,.22);background:rgba(20,16,14,.72);display:flex;flex-direction:column;gap:3px}
+  .treeNode .tnTop{display:flex;align-items:center;gap:6px;min-width:0}
+  .treeNode .tnIcon{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center}
+  .treeNode .tnName{font-weight:700;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .treeNode .tnLv{margin-left:auto;flex:none;font-size:10.5px;color:var(--sub)}
+  .treeNode .tnDesc{font-size:11px;color:var(--sub);line-height:1.4;min-width:0}
+  .treeNode .tnAct{font-size:12px;font-weight:700;flex:none}
+  .treeNode.owned{border-color:var(--coin);background:rgba(227,178,60,.14)}
+  .treeNode.owned .tnName{color:var(--coin)}
+  .treeNode.buyable{border-color:rgba(227,178,60,.6)}
+  .treeNode.poor,.treeNode.locked{cursor:default}
+  .treeNode.poor .tnAct{color:var(--sub)}
+  .treeNode.maxed{opacity:.6}
+  .treeNode.dim{opacity:.45}
+  .treeNode .tnIcon svg{display:block}
+  .treeRoot{position:absolute;width:160px;min-height:72px;border-radius:12px;border:1px dashed rgba(241,230,210,.3);
+    background:rgba(255,255,255,.04);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .treeRoot .tnName{font-weight:700;font-size:14px;color:var(--fg)}
+  .treeRoot .tnDesc{font-size:11px;color:var(--sub)}
+  .treeHint{flex:none;padding:6px 16px 10px;font-size:11px;color:var(--sub)}
+  .subPanel{flex:1;min-height:0;overflow-y:auto;padding:0 16px 16px}
+  .subPanel.hidden{display:none}
+
   /* ---- 首次教學覆蓋層 ---- */
   #tutorial{position:absolute;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
     background:rgba(5,4,6,.7);padding:24px;text-align:center}
@@ -213,8 +257,8 @@
   const $ = id => document.getElementById(id);
 
   // ================= 常數區（所有可調數值集中於此） =================
-  const VERSION = '4.1';                  // 版本號，顯示於說明／結算／結果圖
-  const VERSION_TAG = 'v4.1 遺跡工坊';    // 副標
+  const VERSION = '4.2';                  // 版本號，顯示於說明／結算／結果圖
+  const VERSION_TAG = 'v4.2 遺跡工坊';    // 副標
 
   // ---- 既有物理常數（語意不得更動） ----
   const BOARD_W = 320;        // 盤面內側寬度（盤面單位，隨畫面縮放）
@@ -400,6 +444,25 @@
   ];
   const UPGRADE_DEFS_BY_ID = {};
   UPGRADE_DEFS.forEach(d => UPGRADE_DEFS_BY_ID[d.id] = d);
+
+  // ---- v4.2 技能樹結構：root→枝→節點（父子僅定義視覺路徑；購買硬依賴僅 boost 須先 preview） ----
+  // branch: op 操作枝 / eco 經濟枝 / sur 生存枝；parent 為上一級節點 id，root 為展示根
+  const TREE_ROOT = { id: 'root', name: '工坊核心', branch: 'root' };
+  const TREE_NODES = [
+    { id: 'startPower', parent: 'root',        branch: 'op'  },
+    { id: 'preview',    parent: 'startPower',  branch: 'op'  },
+    { id: 'boost',      parent: 'preview',     branch: 'op'  },
+    { id: 'cutFast',    parent: 'startPower',  branch: 'op'  },
+    { id: 'coin',       parent: 'root',        branch: 'eco' },
+    { id: 'gemCap',     parent: 'coin',        branch: 'eco' },
+    { id: 'gemCoin',    parent: 'gemCap',      branch: 'eco' },
+    { id: 'light',      parent: 'root',        branch: 'sur' },
+    { id: 'bossSlow',   parent: 'light',       branch: 'sur' },
+    { id: 'guard',      parent: 'light',       branch: 'sur' }
+  ];
+  const TREE_BY_ID = {};
+  TREE_NODES.forEach(n => TREE_BY_ID[n.id] = n);
+  const TREE_BRANCH_LABEL = { op: '操作枝', eco: '經濟枝', sur: '生存枝' };
 
   // ---- v3 銘牌（盤面單位） ----
   const PLAQUE_W = 34;             // 銘牌寬
@@ -3154,12 +3217,18 @@
     lastFocus = document.activeElement;
     $('panelTitle').textContent = title;
     $('panelBody').innerHTML = html;
+    $('panel').classList.remove('treeFull');
+    $('overlay').classList.remove('treeFull');
+    $('game').classList.remove('treeFull');
     $('overlay').classList.remove('hidden');
     const close = $('panelClose');
     if (close) close.focus();
   }
   function closePanel(){
     $('overlay').classList.add('hidden'); resetArmed = false;
+    $('panel').classList.remove('treeFull');
+    $('overlay').classList.remove('treeFull');
+    $('game').classList.remove('treeFull');
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
 
@@ -3287,41 +3356,265 @@
     $('seedClear').addEventListener('click', () => { customSeed = ''; saveJSON(SEED_KEY, ''); sfx.ui(); openMenu(); });
   }
 
-  // ---- v3 升級面板 ----
-  function openShop(){
-    const rows = UPGRADE_DEFS.map(def => {
-      const lv = upg(def.id);
-      const maxed = lv >= def.max;
-      const lockedBoost = def.id === 'boost' && !previewUnlocked();
-      const price = maxed ? null : def.prices[lv];
-      const afford = !maxed && !lockedBoost && coins >= price;
-      const diff = maxed || lockedBoost ? 0 : price - coins;
-      let btn;
-      if (maxed) btn = '<button type="button" disabled>滿級</button>';
-      else if (lockedBoost) btn = '<button type="button" disabled>未解鎖</button>';
-      else if (!afford) btn = '<button type="button" disabled>缺 ' + diff + '</button>';
-      else btn = '<button type="button" data-buy="' + def.id + '">' + price + ' 幣</button>';
-      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${def.name} <span class="v">Lv ${lv}/${def.max}</span></div><div class="shopDesc">${upgDesc(def)}</div></div>${btn}</div>`;
-    }).join('');
-    openPanel('升級', `<div class="shopCoins">目前金幣：<span>${coins}</span></div>` + rows);
-    $('panelBody').querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
-      if (shopLockT > 0) return;
-      const def = UPGRADE_DEFS_BY_ID[b.dataset.buy];
-      const lv = upg(def.id);
-      if (lv >= def.max) return;
-      if (def.id === 'boost' && !previewUnlocked()) return;
-      const price = def.prices[lv];
-      if (coins < price) return;
-      coins -= price;
-      upgrades[def.id] = lv + 1;
-      if (UPGRADE_DEFS.every(d => upg(d.id) >= d.max)) unlock('upMax');
-      shopLockT = SHOP_BUY_LOCK;
-      saveJSON(COINS_KEY, coins);
-      saveJSON(UPG_KEY, upgrades);
-      sfx.gem();
-      openShop();
-    }));
+  // ---- v4.2 技能樹布局（邏輯座標；節點寬 150／高 76，樹寬高超出視口可平移） ----
+  const TREE_LAYOUT = {
+    root:       { cx: 490, y: 14  },
+    startPower: { cx: 185, y: 116 },
+    preview:    { cx: 95,  y: 224 },
+    boost:      { cx: 95,  y: 332 },
+    cutFast:    { cx: 275, y: 224 },
+    coin:       { cx: 490, y: 116 },
+    gemCap:     { cx: 490, y: 224 },
+    gemCoin:    { cx: 490, y: 332 },
+    light:      { cx: 765, y: 116 },
+    bossSlow:   { cx: 675, y: 224 },
+    guard:      { cx: 855, y: 224 }
+  };
+  const TREE_W = 980, TREE_H = 430, NODE_W = 160, NODE_H = 76;
+
+  // 實際節點 bbox（含半寬／節點高），縮放與平移邊界以此為準，避免固定 TREE_W 漏掉邊緣節點
+  function treeBBox(){
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const id in TREE_LAYOUT){
+      const p = TREE_LAYOUT[id];
+      minX = Math.min(minX, p.cx - NODE_W / 2);
+      maxX = Math.max(maxX, p.cx + NODE_W / 2);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y + NODE_H);
+    }
+    return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
   }
+
+  function treeIcon(branch){
+    const stroke = 'currentColor';
+    if (branch === 'eco') return '<svg viewBox="0 0 22 22" width="18" height="18"><circle cx="11" cy="11" r="6" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+    if (branch === 'sur') return '<svg viewBox="0 0 22 22" width="18" height="18"><rect x="5" y="5" width="12" height="12" rx="2" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+    if (branch === 'root') return '<svg viewBox="0 0 22 22" width="18" height="18"><polygon points="11,3 18,7 18,15 11,19 4,15 4,7" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+    return '<svg viewBox="0 0 22 22" width="18" height="18"><rect x="7" y="7" width="8" height="8" transform="rotate(45 11 11)" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+  }
+
+  // 節點狀態：maxed／locked（boost 前置）／poor（幣不足）／buyable；owned 表已投入等級
+  function treeState(id){
+    const def = UPGRADE_DEFS_BY_ID[id];
+    const lv = upg(id);
+    if (lv >= def.max) return 'maxed';
+    if (id === 'boost' && !previewUnlocked()) return 'locked';
+    const price = def.prices[lv];
+    if (coins < price) return 'poor';
+    return 'buyable';
+  }
+  function treeParentOwned(id){
+    const meta = TREE_BY_ID[id];
+    if (!meta || meta.parent === 'root') return true;
+    return upg(meta.parent) > 0;
+  }
+
+  function treeNodeHTML(id){
+    const def = UPGRADE_DEFS_BY_ID[id];
+    const meta = TREE_BY_ID[id];
+    const lv = upg(id);
+    const maxed = lv >= def.max;
+    const state = treeState(id);
+    const pos = TREE_LAYOUT[id];
+    const cls = ['treeNode'];
+    if (lv > 0) cls.push('owned');
+    cls.push(state);
+    if (!treeParentOwned(id) && lv === 0) cls.push('dim');
+    let act;
+    if (state === 'maxed') act = '滿級';
+    else if (state === 'locked') act = '需先解鎖輔助線';
+    else if (state === 'poor') act = '缺 ' + (def.prices[lv] - coins);
+    else act = def.prices[lv] + ' 幣';
+    const clickable = state === 'buyable';
+    const descText = state === 'locked' && def.id === 'boost' ? '弧取樣點最高 100' : upgDesc(def);
+    return `<div class="${cls.join(' ')}" ${clickable ? `data-buy="${id}"` : 'data-disabled="1"'} tabindex="0" role="button"
+      aria-label="${def.name} Lv ${lv}/${def.max} ${act}" style="left:${pos.cx - NODE_W / 2}px;top:${pos.y}px;width:${NODE_W}px;min-height:${NODE_H}px">
+      <div class="tnTop"><span class="tnIcon">${treeIcon(meta.branch)}</span><span class="tnName">${def.name}</span><span class="tnLv">Lv ${lv}/${def.max}</span></div>
+      <div class="tnDesc">${descText}</div>
+      <div class="tnAct">${act}</div>
+    </div>`;
+  }
+
+  function treeLinksSVG(){
+    const paths = TREE_NODES.map(n => {
+      const parent = TREE_LAYOUT[n.parent] || TREE_LAYOUT.root;
+      const child = TREE_LAYOUT[n.id];
+      const px = parent.cx, py = parent.y + NODE_H;
+      const cx = child.cx, cy = child.y;
+      const my = (py + cy) / 2;
+      const pOwned = n.parent === 'root' ? true : upg(n.parent) > 0;
+      const cOwned = upg(n.id) > 0;
+      let cls = 'linkGray';
+      if (pOwned && cOwned) cls = 'linkGold';
+      else if (pOwned) cls = 'linkFaint';
+      return `<path class="${cls}" d="M ${px} ${py} L ${px} ${my} L ${cx} ${my} L ${cx} ${cy}" fill="none"/>`;
+    }).join('');
+    return `<svg class="treeLinks" width="${TREE_W}" height="${TREE_H}" viewBox="0 0 ${TREE_W} ${TREE_H}">${paths}</svg>`;
+  }
+
+  // 套件／被動列（樹面板子分頁與舊入口共用）
+  function suiteRowsHTML(){
+    return SUITE_DEFS.map(s => {
+      const lv = suite[s.id] || 0;
+      const maxed = lv >= SUITE_MAX;
+      const price = maxed ? null : SUITE_PRICES[lv];
+      const afford = !maxed && coins >= price;
+      const btn = maxed ? '<button type="button" disabled>滿級</button>'
+        : afford ? `<button type="button" data-suite="${s.id}">${price} 幣</button>`
+        : `<button type="button" disabled>缺 ${price - coins}</button>`;
+      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${s.n} <span class="v">Lv ${lv}/${SUITE_MAX}</span></div><div class="shopDesc">${s.d}</div></div>${btn}</div>`;
+    }).join('');
+  }
+  function passiveRowsHTML(){
+    return PASSIVE_DEFS.map(p => {
+      const lv = passive[p.id] || 0;
+      const maxed = lv >= PASSIVE_MAX;
+      const price = maxed ? null : SUITE_PRICES[lv];
+      const afford = !maxed && coins >= price;
+      const btn = maxed ? '<button type="button" disabled>滿級</button>'
+        : afford ? `<button type="button" data-pass="${p.id}">${price} 幣</button>`
+        : `<button type="button" disabled>缺 ${price - coins}</button>`;
+      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${p.n} <span class="v">Lv ${lv}/${PASSIVE_MAX}</span></div><div class="shopDesc">${p.d}</div></div>${btn}</div>`;
+    }).join('');
+  }
+
+  let treeTab = 'tree';
+  function buyUpgrade(id){
+    if (shopLockT > 0) return;
+    const def = UPGRADE_DEFS_BY_ID[id];
+    const lv = upg(id);
+    if (lv >= def.max) return;
+    if (def.id === 'boost' && !previewUnlocked()) return;
+    const price = def.prices[lv];
+    if (coins < price) return;
+    coins -= price;
+    upgrades[id] = lv + 1;
+    if (UPGRADE_DEFS.every(d => upg(d.id) >= d.max)) unlock('upMax');
+    shopLockT = SHOP_BUY_LOCK;
+    saveJSON(COINS_KEY, coins);
+    saveJSON(UPG_KEY, upgrades);
+    sfx.gem();
+    openShop();
+  }
+  function buySuite(id){
+    const lv = suite[id];
+    if (lv >= SUITE_MAX) return;
+    const price = SUITE_PRICES[lv];
+    if (coins < price) return;
+    coins -= price; suite[id] = lv + 1;
+    saveJSON(COINS_KEY, coins); saveJSON(SUITE_KEY, suite);
+    sfx.gem(); openShop();
+  }
+  function buyPassive(id){
+    const lv = passive[id];
+    if (lv >= PASSIVE_MAX) return;
+    const price = SUITE_PRICES[lv];
+    if (coins < price) return;
+    coins -= price; passive[id] = lv + 1;
+    saveJSON(COINS_KEY, coins); saveJSON(PASSIVE_KEY, passive);
+    sfx.gem(); openShop();
+  }
+
+  // ---- v4.2 全屏技能樹面板（樹／永久套裝／被動槽同一面板子分頁） ----
+  function openShop(tab){
+    treeTab = tab || treeTab;
+    const root = TREE_LAYOUT.root;
+    const nodes = TREE_NODES.map(n => treeNodeHTML(n.id)).join('');
+    const html = `
+      <div class="treePanel">
+        <div class="treeTabs">
+          <button type="button" data-tab="tree" class="${treeTab === 'tree' ? 'on' : ''}">技能樹</button>
+          <button type="button" data-tab="suite" class="${treeTab === 'suite' ? 'on' : ''}">永久套裝</button>
+          <button type="button" data-tab="passive" class="${treeTab === 'passive' ? 'on' : ''}">被動槽</button>
+        </div>
+        <div class="treeCoin">目前金幣：<span>${coins}</span></div>
+        <div class="treeViewport" id="treeViewport">
+          <div class="treeCanvas" id="treeCanvas" style="width:${TREE_W}px;height:${TREE_H}px">
+            ${treeLinksSVG()}
+            <div class="treeRoot" style="left:${root.cx - 80}px;top:${root.y}px;width:160px">
+              <span class="tnIcon">${treeIcon('root')}</span>
+              <span class="tnName">${TREE_ROOT.name}</span>
+              <span class="tnDesc">研製各項工坊強化</span>
+            </div>
+            ${nodes}
+          </div>
+        </div>
+        <div class="subPanel ${treeTab === 'suite' ? '' : 'hidden'}" id="suitePanel">${suiteRowsHTML()}</div>
+        <div class="subPanel ${treeTab === 'passive' ? '' : 'hidden'}" id="passivePanel">${passiveRowsHTML()}</div>
+        <div class="treeHint" id="treeHint">拖動平移技能樹；節點顯示等級、價格與前置條件</div>
+      </div>`;
+    openPanel('技能樹', html);
+    $('panel').classList.add('treeFull');
+    $('overlay').classList.add('treeFull');
+    $('game').classList.add('treeFull');
+    wireTreePanel();
+  }
+
+  function wireTreePanel(){
+    const body = $('panelBody');
+    body.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+      treeTab = b.dataset.tab; sfx.ui(); openShop(treeTab);
+    }));
+    body.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => buyUpgrade(b.dataset.buy)));
+    body.querySelectorAll('[data-suite]').forEach(b => b.addEventListener('click', () => buySuite(b.dataset.suite)));
+    body.querySelectorAll('[data-pass]').forEach(b => b.addEventListener('click', () => buyPassive(b.dataset.pass)));
+    // 鍵盤：Enter／Space 觸發可購買節點
+    body.querySelectorAll('.treeNode[data-buy]').forEach(n => n.addEventListener('keydown', e => {
+      if (e.code === 'Enter' || e.code === 'Space'){ e.preventDefault(); buyUpgrade(n.dataset.buy); }
+    }));
+    wireTreePan();
+  }
+
+  // 樹平移：觸控拖動／滑鼠拖動／滾輪；初始自動縮放至視口，輕量邊界回彈
+  let pan = { x: 0, y: 0 }, panScale = 1, panActive = false, panMoved = false, panLast = null;
+  function fitScale(){
+    const vp = $('treeViewport');
+    if (!vp || !vp.clientWidth) return 1;
+    const bb = treeBBox();
+    const pad = 12;
+    return Math.min(1, (vp.clientWidth - pad * 2) / bb.w, (vp.clientHeight - pad * 2) / bb.h);
+  }
+  function applyPan(){
+    const cv = $('treeCanvas');
+    if (cv) cv.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${panScale})`;
+  }
+  function clampPan(){
+    const vp = $('treeViewport');
+    if (!vp) return;
+    const bb = treeBBox();
+    const w = bb.w * panScale, h = bb.h * panScale;
+    if (w <= vp.clientWidth){
+      pan.x = (vp.clientWidth - w) / 2 - bb.minX * panScale;
+    } else {
+      pan.x = Math.max(-bb.minX * panScale, Math.min(vp.clientWidth - bb.maxX * panScale, pan.x));
+    }
+    if (h <= vp.clientHeight){
+      pan.y = (vp.clientHeight - h) / 2 - bb.minY * panScale;
+    } else {
+      pan.y = Math.max(-bb.minY * panScale, Math.min(vp.clientHeight - bb.maxY * panScale, pan.y));
+    }
+  }
+  function wireTreePan(){
+    const vp = $('treeViewport');
+    if (!vp) return;
+    panScale = fitScale();
+    pan = { x: 0, y: 0 };
+    clampPan(); applyPan();
+    const onDown = (x, y) => { panActive = true; panMoved = false; panLast = { x, y }; vp.classList.add('dragging'); };
+    const onMove = (x, y) => {
+      if (!panActive || !panLast) return;
+      const dx = x - panLast.x, dy = y - panLast.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) panMoved = true;
+      pan.x += dx; pan.y += dy; panLast = { x, y }; clampPan(); applyPan();
+    };
+    const onUp = () => { panActive = false; panLast = null; vp.classList.remove('dragging'); };
+    vp.addEventListener('pointerdown', e => { if (e.target.closest('[data-buy]')) return; onDown(e.clientX, e.clientY); });
+    vp.addEventListener('pointermove', e => onMove(e.clientX, e.clientY));
+    addEventListener('pointerup', onUp);
+    vp.addEventListener('wheel', e => { e.preventDefault(); pan.x -= e.deltaX; pan.y -= e.deltaY; clampPan(); applyPan(); }, { passive: false });
+    vp.addEventListener('click', e => { if (panMoved){ e.stopPropagation(); e.preventDefault(); } }, true);
+  }
+
 
   // ---- v3 重置進度：清 best／統計／圖鑑／成就／金幣／升級，保留音效與顯示開關 ----
   function resetProgress(){
@@ -3401,50 +3694,9 @@
       sfx.gem(); openTasks();
     }));
   }
-  function openPassive(){
-    const rows = PASSIVE_DEFS.map(p => {
-      const lv = passive[p.id] || 0;
-      const maxed = lv >= PASSIVE_MAX;
-      const price = maxed ? null : SUITE_PRICES[lv];
-      const afford = !maxed && coins >= price;
-      const btn = maxed ? '<button type="button" disabled>滿級</button>'
-        : afford ? `<button type="button" data-pass="${p.id}">${price} 幣</button>`
-        : `<button type="button" disabled>缺 ${price - coins}</button>`;
-      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${p.n} <span class="v">Lv ${lv}/${PASSIVE_MAX}</span></div><div class="shopDesc">${p.d}</div></div>${btn}</div>`;
-    }).join('');
-    openPanel('被動槽（跨局保留）', `<div class="shopCoins">目前金幣：<span>${coins}</span></div>` + rows);
-    $('panelBody').querySelectorAll('[data-pass]').forEach(b => b.addEventListener('click', () => {
-      const id = b.dataset.pass, lv = passive[id];
-      if (lv >= PASSIVE_MAX) return;
-      const price = SUITE_PRICES[lv];
-      if (coins < price) return;
-      coins -= price; passive[id] = lv + 1;
-      saveJSON(COINS_KEY, coins); saveJSON(PASSIVE_KEY, passive);
-      sfx.gem(); openPassive();
-    }));
-  }
-  function openSuite(){
-    const rows = SUITE_DEFS.map(s => {
-      const lv = suite[s.id] || 0;
-      const maxed = lv >= SUITE_MAX;
-      const price = maxed ? null : SUITE_PRICES[lv];
-      const afford = !maxed && coins >= price;
-      const btn = maxed ? '<button type="button" disabled>滿級</button>'
-        : afford ? `<button type="button" data-suite="${s.id}">${price} 幣</button>`
-        : `<button type="button" disabled>缺 ${price - coins}</button>`;
-      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${s.n} <span class="v">Lv ${lv}/${SUITE_MAX}</span></div><div class="shopDesc">${s.d}</div></div>${btn}</div>`;
-    }).join('');
-    openPanel('永久套裝', `<div class="shopCoins">目前金幣：<span>${coins}</span></div>` + rows);
-    $('panelBody').querySelectorAll('[data-suite]').forEach(b => b.addEventListener('click', () => {
-      const id = b.dataset.suite, lv = suite[id];
-      if (lv >= SUITE_MAX) return;
-      const price = SUITE_PRICES[lv];
-      if (coins < price) return;
-      coins -= price; suite[id] = lv + 1;
-      saveJSON(COINS_KEY, coins); saveJSON(SUITE_KEY, suite);
-      sfx.gem(); openSuite();
-    }));
-  }
+  // 被動槽／永久套裝：與技能樹同一全屏面板的子分頁（不另開重複清單）
+  function openPassive(){ openShop('passive'); }
+  function openSuite(){ openShop('suite'); }
   function openSink(){
     const canReroll = rerollUsed < REROLL_PER_RUN;
     const bagBtn = coins >= BAG_PRICE
