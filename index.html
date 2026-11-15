@@ -1,0 +1,3915 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>地底レバー</title>
+<meta name="description" content="拉動拉桿彈出金貨，沿軌道一路深入地底的單檔休閒遊戲">
+<style>
+  :root{
+    --bg:#0b0a0c; --fg:#f1e6d2; --sub:#a8998a;
+    --howto-bg:#231c18; --howto-fg:#f1e6d2;
+    --rock0:#6a5641; --rock1:#463a31; --rock2:#2b2630; --rock3:#14131c; --rock4:#08080d;
+    --wall:#231c18; --wall-edge:#5c4a3b;
+    --plank:#8a5a33; --plank-dark:#3e2614; --nail:#24170d;
+    --lever:#e2e6e9; --lever-line:#3b3f44;
+    --hole:#030203; --hole-rim:#3a2c20;
+    --coin:#e3b23c; --coin-line:#8f6514; --coin-hi:#fff0b3;
+    --crystal:#78b4ff; --crystal2:#c18cff;
+    --sky:#6fb2ea; --sky-low:#cfe9fb;
+    --hill:#93c96f; --grass:#5da540; --grass-dark:#3d7d2a; --soil:#7a5a3c;
+    --accent-danger:#c0563f;   /* 新增：危險／被追逼近色 */
+    --accent-exit:#e8c97a;     /* 新增：出口門光色 */
+    --accent-crystal:#78b4ff;  /* 新增：晶眼 Boss 與結晶事件色 */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:"PingFang TC","Hiragino Sans TC","Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+    touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  }
+  #game{position:relative;width:100%;max-width:420px;height:100vh;height:100dvh;margin:0 auto;overflow:hidden}
+  #game.treeFull{max-width:100%}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+
+  /* ---- 頂部單列 HUD：高 44px，左右內縮 10px，中間留空 ---- */
+  #hud{position:absolute;top:0;left:0;right:0;height:44px;z-index:5;display:flex;align-items:center;flex-wrap:nowrap;
+    padding:calc(10px + env(safe-area-inset-top)) 10px 0 10px;gap:10px;pointer-events:none}
+  #capsule{display:flex;align-items:baseline;gap:4px;padding:6px 10px;border-radius:10px;min-width:0;
+    background:rgba(20,16,14,.62);border:1px solid rgba(241,230,210,.22);pointer-events:auto;white-space:nowrap}
+  #coinCapsule{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:10px;min-width:0;
+    background:rgba(20,16,14,.62);border:1px solid rgba(227,178,60,.35);pointer-events:auto;white-space:nowrap}
+  #coinIcon{width:8px;height:8px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 30% 30%, #fff0b3 0%, #e3b23c 45%, #8f6514 100%);
+    border:1px solid rgba(143,101,20,.8)}
+  #coinVal{font-size:12px;font-weight:700;color:var(--coin);letter-spacing:.5px;display:inline-block}
+  #coinCapsule.jump #coinVal{animation:coinJump .35s ease}
+  @keyframes coinJump{0%{transform:translateY(0)}40%{transform:translateY(-2px)}100%{transform:translateY(0)}}
+  #floorMain{font-size:13px;font-weight:700;letter-spacing:.5px}
+  #floorSub{font-size:11px;color:var(--sub)}
+  #gemDots{display:flex;gap:3px;margin-left:4px}
+  #gemDots i{width:2px;height:2px;border-radius:50%;background:transparent;display:inline-block}
+  #gemDots i.on{background:var(--coin)}
+  #modBar{width:2px;align-self:stretch;border-radius:1px;flex:none}
+  #itemBar{position:absolute;top:54px;left:12px;display:flex;gap:6px;z-index:6}
+  .itemChip{position:relative;width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+  .itemChip::before{content:'';position:absolute;left:9px;top:9px;width:26px;height:26px;border-radius:7px;border:1px solid rgba(241,230,210,.25);background:rgba(20,16,12,.72)}
+  .itemChip .ic{position:relative;z-index:1;font-size:11px}
+  .itemChip .n{position:relative;z-index:1;font-size:9px;color:var(--coin);margin-top:1px}
+  #bossBar{flex:1;max-width:180px;display:none;flex-direction:column;gap:2px;justify-content:center}
+  #bossBar.on{display:flex}
+  #armorDots{display:flex;gap:3px;height:2px}
+  #armorDots i{width:2px;height:2px;border-radius:50%;background:var(--coin);opacity:.9}
+  #armorDots i.off{background:rgba(241,230,210,.25)}
+  #bossBarTrack{position:relative;height:4px;border-radius:2px;background:rgba(241,230,210,.18);overflow:hidden;
+    box-shadow:inset 0 1px 0 rgba(255,240,205,.12)}
+  #bossBarFill{height:100%;width:0%;border-radius:2px;background:var(--coin)}
+  #bossBarFill.hot{background:var(--accent-danger)}
+  #bossBar.eye #bossBarFill{background:linear-gradient(90deg,var(--crystal),var(--accent-crystal))}
+  #bossBarTrack::after{content:'';position:absolute;inset:0;
+    background:repeating-linear-gradient(90deg,transparent 0 calc(10% - 1px),rgba(0,0,0,.5) calc(10% - 1px) 10%)}
+  #hudRight{margin-left:auto;display:flex;gap:8px;pointer-events:auto}
+  #hud button{min-height:44px;padding:0 12px;font-size:14px;font-family:inherit;border:1px solid rgba(241,230,210,.35);
+    border-radius:8px;background:rgba(20,16,14,.62);color:var(--fg)}
+  #autoBtn.on{background:var(--coin);color:#1a1410;border-color:var(--coin)}
+
+  /* 成就提示：右上單行，同時最多一條 */
+  #toast{position:absolute;top:calc(54px + env(safe-area-inset-top));right:10px;z-index:6;max-width:70%;
+    padding:8px 12px;border-radius:8px;background:rgba(20,16,14,.86);border:1px solid rgba(241,230,210,.25);
+    font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;text-align:right}
+  #toast.on{opacity:1}
+
+  /* ---- 結算頁 ---- */
+  #over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(5,4,6,.78);color:var(--fg);text-align:center;padding:20px}
+  #over .big{font-size:42px;font-weight:700}
+  #over .sub{font-size:14px;color:var(--sub)}
+  .overBtns{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  #over button{min-width:180px;min-height:48px;font-size:18px;font-family:inherit;border:0;border-radius:8px;background:var(--fg);color:#1a1410}
+  #over button.ghost{background:transparent;color:var(--fg);border:1px solid rgba(241,230,210,.35)}
+
+  /* ---- 覆蓋層（圖鑑／統計／成就／說明） ---- */
+  #overlay{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,4,6,.72);padding:16px}
+  #panel{width:100%;max-width:340px;max-height:90%;display:flex;flex-direction:column;border-radius:14px;
+    background:var(--howto-bg);border:1px solid rgba(241,230,210,.18);overflow:hidden}
+  #panelHead{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+  #panelTitle{font-size:17px;font-weight:700}
+  #panelClose{width:44px;height:44px;border-radius:10px;border:1px solid rgba(241,230,210,.3);background:transparent;color:var(--fg);font-size:16px;display:flex;align-items:center;justify-content:center}
+  #panelBody{padding:4px 16px 16px;overflow-y:auto;font-size:14px;line-height:1.6}
+  .panelRow{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(241,230,210,.08)}
+  .panelRow:last-child{border-bottom:0}
+  .panelRow .k{color:var(--sub)}
+  .menuList{display:flex;flex-direction:column;gap:4px}
+  .menuList.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  .menuList.grid2 .gridFull{grid-column:1/-1}
+  .menuList button{min-height:44px;border-radius:10px;border:1px solid rgba(241,230,210,.25);background:rgba(255,255,255,.05);color:var(--fg);font-size:15px;font-family:inherit;text-align:left;padding:0 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+  .menuList button.sm{min-height:44px;font-size:14px;border-radius:9px}
+  .menuList button .k{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .menuList button .v{flex:none;white-space:nowrap;color:var(--sub);font-size:13px}
+  .menuSec{font-size:12px;color:var(--sub);letter-spacing:1px;margin:4px 2px 2px}
+  .menuSec:first-child{margin-top:0}
+  .menuList button{transition:transform .08s, background .15s}
+  .menuList button:hover:not(:disabled){background:rgba(255,255,255,.1)}
+  .menuList button:active:not(:disabled){transform:scale(.98)}
+  .menuList button:disabled{opacity:.65;cursor:default}
+  .menuList button.lockedRow{opacity:.45;cursor:default}
+  #hud button:hover:not(:disabled), .shopRow button:hover:not(:disabled){background:rgba(255,255,255,.1)}
+  #hud button:active:not(:disabled), .shopRow button:active:not(:disabled){transform:scale(.98)}
+  .shopRow button:disabled{opacity:.65;cursor:default}
+  .codexGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .codexItem{border:1px solid rgba(241,230,210,.12);border-radius:10px;padding:10px}
+  .codexItem .n{font-weight:700;font-size:14px}
+  .codexItem .d{font-size:12px;color:var(--sub);margin-top:2px}
+  .codexItem.unknown .n{color:var(--sub)}
+  .achRow{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(241,230,210,.08)}
+  .achRow:last-child{border-bottom:0}
+  .achDot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex:none;background:var(--sub)}
+  .achDot.on{background:var(--coin)}
+  .achRow .t{font-weight:700}
+  .achRow .d{font-size:12px;color:var(--sub)}
+  .shopCoins{padding:2px 0 10px;font-size:14px;color:var(--coin);font-weight:700}
+  .shopRow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(241,230,210,.08)}
+  .shopRow:last-child{border-bottom:0}
+  .shopMain{min-width:0}
+  .shopName{font-weight:700;font-size:14px}
+  .shopName .v{color:var(--sub);font-weight:400;font-size:12px}
+  .shopDesc{font-size:12px;color:var(--sub);margin-top:2px}
+  .shopRow button{min-height:44px;padding:0 12px;border-radius:8px;border:1px solid rgba(241,230,210,.25);background:rgba(255,255,255,.05);color:var(--fg);font-family:inherit;font-size:13px;flex:none}
+  .shopRow button:disabled{opacity:.45}
+  .shopRow button:not(:disabled){background:var(--coin);color:#1a1410;border-color:var(--coin)}
+
+  /* ---- v4.2 技能樹全屏面板 ---- */
+  #overlay.treeFull{padding:0;display:block}
+  #panel.treeFull{width:100%;height:100%;max-width:100%;max-height:100%;border-radius:0;border:0;background:var(--howto-bg)}
+  #panel.treeFull #panelHead{flex:none}
+  #panel.treeFull #panelBody{overflow:hidden;display:flex;flex-direction:column;padding:0;flex:1}
+  .treePanel{display:flex;flex-direction:column;flex:1;min-height:0}
+  .treeTabs{display:flex;gap:6px;padding:0 16px 10px;flex:none}
+  .treeTabs button{flex:1;min-height:44px;border-radius:10px;border:1px solid rgba(241,230,210,.25);
+    background:rgba(255,255,255,.05);color:var(--fg);font-family:inherit;font-size:14px}
+  .treeTabs button.on{background:var(--coin);color:#1a1410;border-color:var(--coin);font-weight:700}
+  .treeCoin{flex:none;padding:0 16px 10px;font-size:14px;color:var(--coin);font-weight:700}
+  .treeViewport{flex:1;min-height:0;overflow:hidden;position:relative;touch-action:none;cursor:grab}
+  .treeViewport.dragging{cursor:grabbing}
+  .treeCanvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  .treeLinks{position:absolute;top:0;left:0;overflow:visible}
+  .treeLinks path{fill:none;stroke-width:1.6}
+  .treeLinks .linkGold{stroke:var(--coin);stroke-width:2}
+  .treeLinks .linkFaint{stroke:rgba(227,178,60,.4)}
+  .treeLinks .linkGray{stroke:rgba(241,230,210,.28);stroke-dasharray:5 4}
+  .treeNode{position:absolute;width:160px;min-height:76px;border-radius:12px;padding:8px 10px;
+    border:1px solid rgba(241,230,210,.22);background:rgba(20,16,14,.72);display:flex;flex-direction:column;gap:3px}
+  .treeNode .tnTop{display:flex;align-items:center;gap:6px;min-width:0}
+  .treeNode .tnIcon{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center}
+  .treeNode .tnName{font-weight:700;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .treeNode .tnLv{margin-left:auto;flex:none;font-size:10.5px;color:var(--sub)}
+  .treeNode .tnDesc{font-size:11px;color:var(--sub);line-height:1.4;min-width:0}
+  .treeNode .tnAct{font-size:12px;font-weight:700;flex:none}
+  .treeNode.owned{border-color:var(--coin);background:rgba(227,178,60,.14)}
+  .treeNode.owned .tnName{color:var(--coin)}
+  .treeNode.buyable{border-color:rgba(227,178,60,.6)}
+  .treeNode.poor,.treeNode.locked{cursor:default}
+  .treeNode.poor .tnAct{color:var(--sub)}
+  .treeNode.maxed{opacity:.6}
+  .treeNode.dim{opacity:.45}
+  .treeNode .tnIcon svg{display:block}
+  .treeRoot{position:absolute;width:160px;min-height:72px;border-radius:12px;border:1px dashed rgba(241,230,210,.3);
+    background:rgba(255,255,255,.04);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .treeRoot .tnName{font-weight:700;font-size:14px;color:var(--fg)}
+  .treeRoot .tnDesc{font-size:11px;color:var(--sub)}
+  .treeHint{flex:none;padding:6px 16px 10px;font-size:11px;color:var(--sub)}
+  .subPanel{flex:1;min-height:0;overflow-y:auto;padding:0 16px 16px}
+  .subPanel.hidden{display:none}
+
+  /* ---- 首次教學覆蓋層 ---- */
+  #tutorial{position:absolute;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+    background:rgba(5,4,6,.7);padding:24px;text-align:center}
+  #tutorial .steps{display:flex;flex-direction:column;gap:14px}
+  #tutorial .step{display:flex;gap:12px;align-items:center;text-align:left}
+  #tutorial .step .num{width:28px;height:28px;border-radius:50%;border:1px solid var(--coin);color:var(--coin);
+    display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  #tutorial .step .txt{font-size:14px;line-height:1.5}
+  #tutorial .hint{font-size:12px;color:var(--sub)}
+
+  .hidden{display:none !important}
+  :focus-visible{outline:1.5px solid rgba(227,178,60,.55);outline-offset:2px}
+  #panelClose:focus-visible{outline:1px solid rgba(227,178,60,.3);outline-offset:1px}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div id="capsule">
+      <span id="modBar" class="hidden"></span>
+      <span id="floorMain">B1</span>
+      <span id="floorSub"></span>
+      <span id="gemDots"></span>
+    </div>
+    <div id="coinCapsule"><span id="coinIcon"></span><span id="coinVal">0</span></div>
+    <div id="bossBar"><div id="armorDots"></div><div id="bossBarTrack"><div id="bossBarFill"></div></div></div>
+    <div id="hudRight">
+      <button id="menuBtn" type="button">選單</button>
+      <button id="autoBtn" type="button">自動: OFF</button>
+    </div>
+  </div>
+  <div id="itemBar" class="hidden"></div>
+
+  <div id="toast"></div>
+
+  <div id="over" class="hidden">
+    <div class="big" id="result"></div>
+    <div class="sub" id="best"></div>
+    <div class="sub" id="statLine"></div>
+    <div class="overBtns">
+      <button id="retry" type="button">再來一次</button>
+      <button id="share" type="button">分享</button>
+      <button id="menuOpen" type="button" class="ghost">選單</button>
+    </div>
+  </div>
+
+  <div id="overlay" class="hidden">
+    <div id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
+      <div id="panelHead"><div id="panelTitle">選單</div><button id="panelClose" type="button" aria-label="關閉面板">×</button></div>
+      <div id="panelBody"></div>
+    </div>
+  </div>
+
+  <div id="tutorial" class="hidden">
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div class="txt">按住畫面任意處拉動拉桿，力道隨時間累積。</div></div>
+      <div class="step"><div class="num">2</div><div class="txt">放開彈出金貨，越過切縫落到下一段即推進一層。</div></div>
+      <div class="step"><div class="num">3</div><div class="txt">避開洞穴與岩塊，深入地底；每隔五層有寶藏，每十層有 Boss 競技場。</div></div>
+    </div>
+    <div class="hint">點擊任意處開始</div>
+    <div class="hint" id="tutVer"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+
+  // ================= 常數區（所有可調數值集中於此） =================
+  const VERSION = '4.2';                  // 版本號，顯示於說明／結算／結果圖
+  const VERSION_TAG = 'v4.2 遺跡工坊';    // 副標
+
+  // ---- 既有物理常數（語意不得更動） ----
+  const BOARD_W = 320;        // 盤面內側寬度（盤面單位，隨畫面縮放）
+  const WALL = 8;             // 左右牆厚
+  const LEVER_AREA = 36;      // 牆外拉桿繪製寬度
+  const COIN_R = 12;          // 金貨半徑
+  const G = 1500;             // 重力（單位/秒²）
+  const V_MAX = 750;          // 拉滿時的初速（單位/秒）
+  const CHARGE_TIME = 1.0;    // 拉滿所需時間（秒）
+  const ROLL_DECEL = 40;      // 軌道滾動減速（單位/秒²）
+  const RAIL_BOUNCE = 0.6;    // 落軌反彈係數
+  const BOUNCE_MIN_V = 35;    // 低於此速度落軌不反彈
+  const WALL_BOUNCE = 0.2;    // 牆面反彈係數
+  const SIMPLE_LEVELS = 2;    // 最初幾段僅直線坡道
+  const TRAP_DEPTH = 20;      // 落穴判定深度
+  const PIT_W_MIN = 26;       // 落穴寬度範圍
+  const PIT_W_MAX = 28;
+  const PIT_SLOPE_MIN = 10;   // 落穴段坡道傾角（度）
+  const PIT_SLOPE_MAX = 15;
+  const PIT_AFTER = 50;       // 落穴至切縫最小距離
+  const VALLEY_W_MIN = 14;    // 窪地半寬
+  const VALLEY_W_MAX = 20;
+  const VALLEY_DEPTH_MIN = 4; // 窪地深度
+  const VALLEY_DEPTH_MAX = 8;
+  const VALLEY_HOLE_R = 17;   // 窪地底穴半徑
+  const ROCK_RATE = 0.6;      // 彈台末端吊岩機率
+  const ROCK_R_MIN = 9;       // 岩塊半徑
+  const ROCK_R_MAX = 14;
+  const ROCK_UP_MIN = 30;     // 岩塊下端距彈台高度
+  const ROCK_UP_MAX = 55;
+  const ROCK_BOUNCE = 0.55;   // 岩塊反彈係數
+  const ROCK_STEM = 26;       // 吊岩根部長度（視覺）
+  const TWOSTEP_STEEP_MIN = 10; // 雙段坡道陡坡傾角（度）
+  const TWOSTEP_STEEP_MAX = 18;
+  const KICK_LEN_MIN = 22;    // 彈台長度
+  const KICK_LEN_MAX = 40;
+  const KICK_SLOPE_MIN = 12; // 彈台傾角（度）
+  const KICK_SLOPE_MAX = 22;
+  const FAR_DOWN_MIN = 4;     // 遠側下坡傾角（度）
+  const FAR_DOWN_MAX = 10;
+  const FAR_DOWN_MIN_H = 4;
+  const SLOPE_MIN = 3.5;      // 軌道最小傾角（度）
+  const SLOPE_MAX = 15;       // 軌道最大傾角（度）
+  const CLEAR_MIN = 50;       // 上下軌道淨距最小
+  const CLEAR_MAX = 100;      // 同上最大
+  const GAP_POS_MIN = 0.6;    // 切縫位置範圍（距拉桿牆比例）
+  const GAP_POS_MAX = 0.8;
+  const FAR_MIN_LEN = 64;     // 機關段切縫遠側軌道最小長度
+  const GAP_MARGIN = 100;     // 落點與本段切縫間距
+  const LAND_PAD = 45;        // 落點範圍外不開穴寬度
+  const LAND_PAD_FEATURE = 10; // 窪地／落穴同項寬度
+  const LAND_MARGIN = 35;     // 落點與途中穴間距
+  const MID_HOLES_MAX = 2;    // 途中穴數上限
+  const MID_HOLE_GAP = 40;    // 穴間最小間距
+  const GAP_W_MIN = 26;       // 切縫寬度最小
+  const GAP_W_MAX = 32;       // 切縫寬度最大
+  const HOLE_R_MIN = 14;      // 穴半徑最小
+  const HOLE_R_MAX = 16;      // 穴半徑最大
+  const HOLE_FIT = 3;         // 金貨未超出穴多少即落入
+  const WALL_HOLE_REACH = 30; // 牆邊穴承接高度
+  const HOLE_PASS_V = 150;    // 低於此橫速穿越穴上方會落入
+  const REST_V = 20;          // 低於此速度視為靜止
+  const LEVER_REACH = 8;      // 距拉桿此範圍內可彈射／抵達
+  const REST_DIST = 3;        // 靜止點判定距離
+  const FAIL_BACK = 6;        // 重做此次數後回上一段重做
+  const FAIL_GIVEUP = 12;      // 仍失敗則照用
+  const FAIL_SIMPLE = 4;       // 此次數後改無機關段
+  const STUCK_V = 1;          // 低於此速度持續視為卡死
+  const STUCK_TIME = 1.0;     // 卡死判定時長（秒）
+  const REST_TIME = 0.12;     // 靜止判定時長（秒）
+  const AUTO_STALL_S = 4.0;   // R3：自動無解段靜止逾此秒數安全重開
+  const SIM_TIME = 6;         // 配置驗證最長模擬（秒）
+  const STRONG_FROM = 88;     // 高於此力道必敗的配置判定
+  const WIN_STEP = 4;         // 配置掃描力道刻（%）
+  const LEVER_KNOB_R = 9;     // 拉桿握把半徑
+  const TRAIL_V = 300;        // 高於此速度留下殘影
+  const TRAIL_TIME = 0.12;    // 殘影存留（秒）
+  const TRAIL_ALPHA = 0.55;   // 殘影最深透明度
+  const FOG_START = 10;        // 最下段下端起霧距離
+  const FOG_H = 120;          // 岩色漸層高度
+  const FOG_SCREEN = 0.3;     // 畫面底部常駐岩色比例
+  const VARIETY_TRIES = 10;   // 多樣性嘗試次數
+  const VARIETY_PENALTY = 10; // 重複／無機關扣分
+  const GEN_TRIES = 40;       // 一段配置嘗試總數
+  const SHIFT_MIN = 8;        // 與上段成功力道錯開幅度（%）
+  const LEVELS_START = 3;     // 開場預生成段數
+  const GEN_FRAME_MS = 3;     // R1：每幀生成／驗證時間片上限（毫秒，僅排程用，不影響段內容）
+  const GEN_TRIALS_PER_FRAME = 60; // R1：單幀 trial 計數後備上限（主上限為時間片）
+  const LEVELS_AHEAD = 8;     // 預先生成段數
+  const WIN_MIN0 = 10;        // 成功力道寬度下限（首段）
+  const WIN_MIN_END = 6;      // 同上（深段）
+  const WIN_MAX0 = 34;        // 成功力道寬度上限（首段）
+  const WIN_MAX_END = 20;     // 同上（深段）
+  const WIN_LEVELS = 25;      // 難化跨度段數
+  const COIN_SCREEN_Y = 0.40; // 金貨於畫面高度比例
+  const CAM_EASE = 9;         // 相機追隨速度（1/秒）
+  const FALL_TIME = 0.5;      // 落穴至結算時長（秒）
+  const STEP = 1 / 480;        // 物理固定步進（秒）
+  const PLAY_SPEED = 1.8;      // 實機物理倍速
+  const BEST_KEY = 'endlessShinkansen.bestStations';
+
+  // ---- Boss 戰與事件樓層（既有） ----
+  const TREASURE_EVERY = 5;    // 每 5 層一個寶藏層
+  const DARK_EVENT_RATE = 0.15; // 幽暗層出現機率
+  const ROCKS_EVENT_RATE = 0.20; // 岩陣層出現機率
+  const ARENA_GAP = 9;         // 兩場 Boss 戰間一般層數
+  const ARENA_LEN = 10;        // 每場 Boss 戰段數
+  const ARENA_FLOOR = 10;      // Boss 戰世界樓層（10、20、30…）
+  const SEG_TIME = 12.0;       // 單段 Boss 追到金貨秒數
+  const CUT_TIME = 1.8;        // 擊破後衝門過場總時長（秒）
+  const BOSS_R = 26;           // Boss 本體半徑
+  const BOSS_DROP_TIME = 0.35; // 鑽穴墜落動畫秒數
+  const BANNER_TIME = 1.6;     // 中央橫幅顯示秒數
+
+  // ---- M1 軌跡預覽 ----
+  const PREVIEW_POINTS = 40;   // 預測弧取樣點上限
+  const PREVIEW_ALPHA = 0.28;  // 預測弧最大透明度
+  const PREVIEW_TIME = 1.2;    // 預測模擬時長（秒）
+
+  // ---- M3 粒子 ----
+  const PARTICLE_MAX = 120;     // 同時在場粒子上限
+  const DUST_COUNT = 6;         // 落軌塵粒數
+  const SPARK_COUNT = 8;         // 金貨火花數
+  const LUNGE_COUNT = 10;        // Boss 撲擊粒子數
+  const LAND_SFX_GAP = 0.15;      // 落軌音效最小間隔（秒）
+  const LAND_SHAKE_MAG = 2;      // D-3 落軌 1 級震動幅度（盤面單位）
+  const LAND_SHAKE_TIME = 0.12;  // D-3 落軌 1 級震動時長（秒）
+  const CLEAR_SFX_GAP = 0.20;     // 過關音效最小間隔（秒）
+
+  // ---- M4 震動 ----
+  const SHAKE_MAX = 6;          // 最大震動位移（盤面單位）
+  const SHAKE_TIME = 0.35;      // 震動最長時長（秒）
+
+  // ---- M5 事件層擴充 ----
+  const CRYSTAL_EVENT_RATE = 0.10; // 結晶層出現機率
+  const ECHO_EVENT_RATE = 0.10;    // 回聲層出現機率
+  const CRYSTAL_DECEL_MULT = 1.5;   // 結晶層滾動減速倍率（更黏滯）
+  const ECHO_LIGHT_MULT = 1.4;      // 回聲層照明半徑倍率
+  const ECHO_GHOSTS = 3;           // 回聲殘影數量
+
+  // ---- M6 新增地形（彈簧台／階梯） ----
+  const SPRING_PAD_HALF = 9;      // 彈簧台觸發寬度半徑（盤面單位）
+  const SPRING_BOOST_MIN = 120;   // 彈簧台著地切線加速下限
+  const SPRING_BOOST_MAX = 180;   // 彈簧台著地切線加速上限
+  const STAIRS_RISE1 = 2;         // 階梯第一級抬升
+  const STAIRS_RISE2 = 1;         // 階梯第二級抬升
+
+  // ---- M7 寶藏層寶石 ----
+  const GEM_PER_LEVEL = 3;       // 每寶藏層寶石數
+  const GEM_BONUS_PER = 0.08;    // 每顆寶石蓄力速度加成
+  const GEM_BONUS_CAP = 0.24;    // 蓄力加成上限
+
+  // ---- M8 雙型 Boss ----
+  const EYE_SEG_TIME_BONUS = 2.0; // 晶眼 Boss 單段追擊加時（秒）
+
+  // ---- v3 金幣經濟（公式常數） ----
+  const COIN_BASE = 10;            // 一般層基礎幣值
+  const COIN_DEPTH_RATE = 0.05;    // 深度係數：每世界層 +5%
+  const COIN_DEPTH_CAP = 2.0;      // 深度係數上限
+  const COIN_EVENT_BONUS = { treasure: 10, rocks: 5, crystal: 6, echo: 4, dark: 4 }; // 事件額外幣
+  const COIN_ARENA_SEG = 8;        // 競技場每段幣值
+  const COIN_ARENA_CLEAR = 50;     // 整場競技場通過額外幣
+  const COIN_PARTICLE_MAX = 6;     // 發幣時 HUD 上方粒子上限
+  const COIN_JUMP = 2;             // HUD 幣值上跳位移（px）
+  const COIN_JUMP_TIME = 0.35;     // 上跳動畫時長（秒）
+
+  // ---- v3 升級樹（價格／等級上限，詳見 UPGRADES） ----
+  const SHOP_BUY_LOCK = 0.2;       // 購買防連點冷卻（秒）
+  const PREVIEW_POINTS_MAX = 100;  // 輔助線最高取樣點數
+
+  // ---- v3 升級樹定義：id／名稱／等級上限／各級價格（金幣） ----
+  const UPGRADE_DEFS = [
+    { id: 'preview',   name: '輔助線解鎖', max: 1, prices: [120] },
+    { id: 'boost',     name: '輔助線強化', max: 3, prices: [60, 120, 200] },
+    { id: 'coin',      name: '金幣加成',   max: 4, prices: [80, 160, 280, 420] },
+    { id: 'startPower',name: '開局力道',   max: 3, prices: [100, 200, 350] },
+    { id: 'gemCap',    name: '寶石上限',   max: 3, prices: [120, 240, 400] },
+    { id: 'bossSlow',  name: 'Boss 減速', max: 3, prices: [150, 300, 500] },
+    { id: 'light',     name: '照明半徑',   max: 3, prices: [90, 180, 300] },
+    { id: 'gemCoin',   name: '寶石轉金幣', max: 2, prices: [150, 300] },
+    { id: 'guard',     name: '起始保護',   max: 2, prices: [400, 800] },
+    { id: 'cutFast',   name: '過場加速',   max: 2, prices: [200, 350] }
+  ];
+  const UPGRADE_DEFS_BY_ID = {};
+  UPGRADE_DEFS.forEach(d => UPGRADE_DEFS_BY_ID[d.id] = d);
+
+  // ---- v4.2 技能樹結構：root→枝→節點（父子僅定義視覺路徑；購買硬依賴僅 boost 須先 preview） ----
+  // branch: op 操作枝 / eco 經濟枝 / sur 生存枝；parent 為上一級節點 id，root 為展示根
+  const TREE_ROOT = { id: 'root', name: '工坊核心', branch: 'root' };
+  const TREE_NODES = [
+    { id: 'startPower', parent: 'root',        branch: 'op'  },
+    { id: 'preview',    parent: 'startPower',  branch: 'op'  },
+    { id: 'boost',      parent: 'preview',     branch: 'op'  },
+    { id: 'cutFast',    parent: 'startPower',  branch: 'op'  },
+    { id: 'coin',       parent: 'root',        branch: 'eco' },
+    { id: 'gemCap',     parent: 'coin',        branch: 'eco' },
+    { id: 'gemCoin',    parent: 'gemCap',      branch: 'eco' },
+    { id: 'light',      parent: 'root',        branch: 'sur' },
+    { id: 'bossSlow',   parent: 'light',       branch: 'sur' },
+    { id: 'guard',      parent: 'light',       branch: 'sur' }
+  ];
+  const TREE_BY_ID = {};
+  TREE_NODES.forEach(n => TREE_BY_ID[n.id] = n);
+  const TREE_BRANCH_LABEL = { op: '操作枝', eco: '經濟枝', sur: '生存枝' };
+
+  // ---- v3 銘牌（盤面單位） ----
+  const PLAQUE_W = 34;             // 銘牌寬
+  const PLAQUE_H = 16;             // 銘牌高
+  const PLAQUE_R = 3;              // 銘牌圓角
+  const PLAQUE_FONT = 10;          // 銘牌字級（盤面單位）
+  const PLAQUE_WEAR = 6;           // 銘牌磨損斑數上限
+  const PLAQUE_OFFSET_Y = 10;      // 拉桿下緣向外（下）偏移
+
+  // ---- v3.1 N3 關卡修飾詞（一局一個，不疊加；生成與 trial 共用同一份） ----
+  const MOD_DEFS = {
+    calm:     { n: '平靜', d: '無修飾',       coin: 1.0,  w: 40, dot: 'rgba(241,230,210,.35)' },
+    rich:     { n: '富礦', d: '不生成寶石',   coin: 1.6,  w: 15, dot: '#e3b23c' },
+    dim:      { n: '微光', d: '照明縮小',     coin: 1.25, w: 15, dot: '#78b4ff' },
+    swift:    { n: '急襲', d: '競技場追擊更快', coin: 1.4, w: 15, dot: '#c0563f' },
+    rockfall: { n: '落石', d: '每層多一顆吊岩', coin: 1.3, w: 15, dot: '#8a5a33' }
+  };
+  const MOD_KEYS = Object.keys(MOD_DEFS);
+  const MOD_DIM_LIGHT = 0.7;       // 微光修飾照明倍率（視覺）
+  const MOD_SWIFT_SEG_PENALTY = 1.5; // 急襲：競技場單段追擊減秒
+  const MOD_ROCKFALL_EXTRA = 1;    // 落石：每層額外吊岩數
+
+  // ---- v3.1 N1 護甲 Boss ----
+  const ARMOR_COUNT = 3;          // 護甲片數
+  const ARMOR_RESET_PROGRESS = 0.35; // 碎甲後逼近進度重置值
+  const ARMOR_SPEED_HIT = 1.08;    // 每次碎甲累積速度倍率
+  const ARMOR_SPEED_FURY = 1.24;   // 三片全碎後速度倍率
+  const ARMOR_FURY_TIME = 1.0;     // 全碎獨立過場停頓（秒）
+  const ARMOR_DEBRIS = 10;        // 碎甲碎片粒子數
+  const ARMOR_RING_COLOR = '#b98a4a';
+
+  // ---- v3.1 N2 每日挑戰 ----
+  const DAILY_COIN_MULT = 1.5;     // 每日挑戰金幣倍率
+  const DAILY_BEST_KEY = 'endlessShinkansen.daily.best';
+  const DAILY_DONE_KEY = 'endlessShinkansen.daily.done';
+  const DAILY_DATE_KEY = 'endlessShinkansen.daily.date';
+
+  // ---- v3.1 N6 新增升級效果 ----
+  const GEM_COIN_VALUE = [4, 8];   // 寶石轉金幣：未拾取每顆折算（Lv1/Lv2）
+  const GUARD_SEG_LIMIT = [2, 3];  // 起始保護：前 N 段落穴免死（Lv1/Lv2）
+  const GUARD_USE_LIMIT = [1, 2];  // 每局保護次數上限
+  const CUT_FAST_TIME = [CUT_TIME, 1.4, 1.1]; // 過場加速：原始 / Lv1 / Lv2
+
+  // ================= v4.1 遺跡工坊常數 =================
+  // ---- 金貨型態（物理差異；trial／實機共用同一份常數） ----
+  const COIN_TYPES = {
+    normal:  { n: '標準', bounce: RAIL_BOUNCE, bounceMin: BOUNCE_MIN_V, decel: ROLL_DECEL, vmax: 1, rockDeflect: 1, heavy: false },
+    bouncy:  { n: '彈跳', bounce: 0.78, bounceMin: 50, decel: ROLL_DECEL, vmax: 1, rockDeflect: 1, heavy: false },
+    slick:   { n: '滑順', bounce: RAIL_BOUNCE, bounceMin: BOUNCE_MIN_V, decel: 22, vmax: 1, rockDeflect: 1, heavy: false },
+    heavy:   { n: '重型', bounce: RAIL_BOUNCE, bounceMin: BOUNCE_MIN_V, decel: ROLL_DECEL, vmax: 0.92, rockDeflect: 0.5, heavy: true }
+  };
+  const COIN_TYPE_KEY = 'endlessShinkansen.coinType';
+
+  // ---- 七機關（mover/portal/rotor 為僅手動；自動模式不生成，trial 視為一般段） ----
+  const MECH_MOVER_PERIOD = 3.5;   // 移動平台週期（秒）
+  const MECH_MOVER_AMP = 14;       // 移動平台振幅（盤面單位）
+  const MECH_MOVER_HALF = 15;      // 移動平台半寬（盤面單位）
+  const MECH_PORTAL_FADE = 0.25;  // 傳送門淡入淡出（秒）
+  const MECH_PORTAL_R = 10;        // 傳送門碰撞半徑
+  const MECH_WIND_FORCE = 180;     // 風場推力（單位/秒²）
+  const MECH_WIND_LEN = 60;        // 風場區長（盤面單位）
+  const MECH_ICE_DECEL = 0.5;     // 冰面滾動減速倍率
+  const MECH_BREAK_HP = 1;         // 可破壞岩塊耐久
+  const MECH_PAD_BOUNCE = 0.85;   // 緩衝墊接住反彈係數
+  const MECH_ROTOR_PERIOD = 4.0;  // 旋槳週期（秒）
+  const MECH_ROTOR_R = 11;         // 旋槳端點碰撞半徑
+  const MECH_ROTOR_ARM = 34;       // 旋槳臂長（盤面單位）
+  const MECH_RATE = 0.30;         // 一般層機關出現機率（安全項）
+  const MECH_MANUAL_RATE = 0.22;  // 僅手動機關出現機率（自動模式不生成）
+
+  // ---- 三道具 ----
+  const ITEM_DEFS = {
+    shield: { n: '護盾', max: 3, key: '1', d: '擋一次落穴／碎甲' },
+    drill:  { n: '鑽頭', max: 3, key: '2', d: '鑽破一塊可破壞岩' },
+    magnet: { n: '磁石', max: 3, key: '3', d: '吸附半徑內寶石' }
+  };
+  const MAGNET_RADIUS = 90;        // 磁石吸附半徑（盤面單位）
+  const ITEM_HUD_SIZE = 26;        // 道具小圖示尺寸（px，含數字）
+
+  // ---- 二段蓄力（僅手動） ----
+  const DASH_MULT = 0.55;          // 空中補推速度倍率（×V_MAX）
+  const DASH_PER_FLIGHT = 1;       // 每次飛行可用次數
+  const DASH_PER_RUN = 2;          // 每局限用次數
+
+  // ---- 遺跡房岔路 ----
+  const RELIC_EVERY = 8;           // 每 8 層一岔路
+  const RELIC_GEMS = 3;            // 左側寶石數
+  const RELIC_COINS = 25;          // 右側金幣
+
+  // ---- 三模式 ----
+  const SPRINT_START_TIME = 60;    // 限時衝刺起始秒數
+  const SPRINT_SEG_BONUS = 4;      // 過層加時
+  const SPRINT_ARENA_BONUS = 15;   // 過競技場加時
+  const RELIC_START_FLOOR = 12;    // 殘局挑戰起始層
+
+  // ---- 每日三任務 ----
+  const DAILY_TASK_KEY = 'endlessShinkansen.tasks';
+  const TASK_DEFS = [
+    { id: 'streak8', n: '連過 8 層不落地', target: 8, coin: 40 },
+    { id: 'cleanArena', n: '零寶石通關一場競技場', target: 1, coin: 60 },
+    { id: 'deep30', n: '單局最深 B30', target: 30, coin: 80 },
+    { id: 'coin500', n: '累計賺得 500 金幣', target: 500, coin: 60 },
+    { id: 'rush2', n: 'Boss Rush 連勝 2 場', target: 2, coin: 80 }
+  ];
+
+  // ---- sink 經濟 ----
+  const BAG_PRICE = 60;            // 福袋價格
+  const BAG_WEIGHT = { shield: 30, drill: 30, magnet: 40 };
+  const REROLL_PRICE = 40;          // 重 roll 修飾詞價格
+  const REROLL_PER_RUN = 1;         // 每局重 roll 次數
+  const SUITE_PRICES = [100, 180, 280, 400, 550]; // 永久套裝各級價格
+  const SUITE_MAX = 5;
+  const SUITE_DEFS = [
+    { id: 'startCoin', n: '起步金幣', per: 5, d: '每級開局 +5 金幣' },
+    { id: 'startShield', n: '起始護盾', per: 1, d: '每級開局 +1 護盾' },
+    { id: 'magnetR', n: '磁石半徑', per: 15, d: '每級磁石半徑 +15' }
+  ];
+  // ---- 被動槽（跨局等級，與升級樹分開，不雙重加成） ----
+  const PASSIVE_MAX = 5;
+  const PASSIVE_DEFS = [
+    { id: 'springBoot', n: '彈簧靴', d: '每級發射初速 +3%（僅手動）' },
+    { id: 'oilCan', n: '油壺', d: '每 2 級二段蓄力 +1 次（僅手動）' },
+    { id: 'armorPlate', n: '護甲片', d: '每級開局 +1 護盾' }
+  ];
+  const PASSIVE_KEY = 'endlessShinkansen.passive';
+  const SUITE_KEY = 'endlessShinkansen.suite';
+  const RUSH_KEY = 'endlessShinkansen.rush';
+  const SPRINT_KEY = 'endlessShinkansen.sprint';
+  const LEADER_KEY = 'endlessShinkansen.leader';
+  const SEED_KEY = 'endlessShinkansen.seed';
+  const MODE_KEY = 'endlessShinkansen.mode';
+
+  // ---- M13 存檔 key（沿用既有前綴） ----
+  const STATS_KEY = 'endlessShinkansen.stats';
+  const CODEX_KEY = 'endlessShinkansen.codex';
+  const ACH_KEY = 'endlessShinkansen.ach';
+  const SETTINGS_KEY = 'endlessShinkansen.settings';
+  const COINS_KEY = 'endlessShinkansen.coins';
+  const UPG_KEY = 'endlessShinkansen.upgrades';
+  const SAVEV_KEY = 'endlessShinkansen.saveV';
+  const SAVE_V = 4;
+
+  const UNITS_PER_M = 10;       // 盤面單位換算公尺
+  const depthM = y => Math.max(0, Math.round(y / UNITS_PER_M));
+
+  // ================= 狀態 =================
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, SC = 1;
+  let state;      // 'play' 遊玩 / 'fall' 墜落 / 'over' 結算
+  let charging = false;
+  let chargeSource = null;   // 蓄力來源 'pointer' | 'key'，供輸入競態判定
+  let levels;     // 各段軌道／穴／拉桿
+  let here;       // 目前段索引
+  let coin;       // {x,y,vx,vy,still,springUsed}
+  let power, fallT, fallHole, fallFrom, camY, acc;
+  let trail = [], clock = 0;
+  let auto = false, autoTarget = 0, autoRetryT = 0, autoStallT = 0;
+  let banner = { text: '', t: BANNER_TIME, dur: BANNER_TIME };
+  let autoSol = new Map();   // 段 k → 模擬驗證過的必勝力道（0~1）
+  let autoFail = new Set();  // 求解器無解段
+  let autoSolver = null;
+  let autoLastLaunch = -1;
+  let boss = null;
+
+  // ---- 存檔 ----
+  function loadJSON(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
+  function saveJSON(key, v){ try{ if (key === COINS_KEY) v = Math.max(0, Math.min(1e9, Math.floor(Number(v) || 0))); localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
+  // B9：型別檢查＋範圍夾制；NaN／null／空字串視同缺，損毀只丟失該鍵
+  function safeNum(v, dflt){ const n = parseInt(v); return Number.isFinite(n) && n >= 0 ? n : (dflt || 0); }
+  function safeStr(v, dflt){ return typeof v === 'string' && v.trim() !== '' ? v : dflt; }
+  function safeBool(v, dflt){ return typeof v === 'boolean' ? v : dflt; }
+  function safeArr(v){ return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; }
+  // O5：計數類欄位同 coins 口徑，有限且 ≥0 後夾到 1e9
+  function safeCount(v, dflt){ const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(1e9, Math.floor(n)) : (dflt || 0); }
+
+  let best = 0;
+  try { best = parseInt(localStorage.getItem(BEST_KEY)) || 0; } catch(e) {}
+  function saveBest(){ try { localStorage.setItem(BEST_KEY, String(best)); } catch(e) {} }
+  function saveLeader(){ saveJSON(LEADER_KEY, leader); }
+
+  let stats = Object.assign({ runs: 0, deepest: 0, arenas: 0, bosses: 0, segments: 0, coinTotal: 0 }, loadJSON(STATS_KEY, {}));
+  for (const k of ['runs','deepest','arenas','bosses','segments','coinTotal']) stats[k] = safeCount(stats[k], 0);
+  let codex = new Set(safeArr(loadJSON(CODEX_KEY, [])));
+  let ach = new Set(safeArr(loadJSON(ACH_KEY, [])));
+  let settings = Object.assign({ muted: false, preview: true, fx: true }, loadJSON(SETTINGS_KEY, {}));
+  settings.muted = safeBool(settings.muted, false); settings.preview = safeBool(settings.preview, true); settings.fx = safeBool(settings.fx, true);
+
+  // v3 金幣與升級：舊存檔缺欄位／JSON 損毀／localStorage 不可用皆補預設，不拋錯
+  let coins = 0;
+  try { const cv = Number(localStorage.getItem(COINS_KEY)); coins = Number.isFinite(cv) && cv > 0 ? Math.min(1e9, Math.floor(cv)) : 0; } catch(e){ coins = 0; }
+  const UPG_DEFAULTS = { preview: 0, boost: 0, coin: 0, startPower: 0, gemCap: 0, bossSlow: 0, light: 0, gemCoin: 0, guard: 0, cutFast: 0 };
+  let loadedUpg = loadJSON(UPG_KEY, {});
+  if (typeof loadedUpg !== 'object' || loadedUpg === null || Array.isArray(loadedUpg)) loadedUpg = {};  // B9：型別不符即視同缺，不拆字元鍵
+  let upgrades = Object.assign({}, UPG_DEFAULTS, loadedUpg);
+  for (const k of Object.keys(UPG_DEFAULTS)){
+    const v = Number(upgrades[k]);
+    upgrades[k] = Number.isFinite(v) && v >= 0 ? Math.min(UPGRADE_DEFS_BY_ID[k].max, Math.floor(v)) : 0;
+  }
+  let saveV = 0;
+  try { saveV = parseInt(localStorage.getItem(SAVEV_KEY)) || 0; } catch(e){ saveV = 0; }
+  if (saveV < SAVE_V){ saveJSON(SAVEV_KEY, SAVE_V); saveV = SAVE_V; }
+
+  // ---- v4 持久狀態：舊檔缺欄位／損毀 JSON／無 localStorage 皆補預設，不拋錯；既有進度保留 ----
+  function num0(v){ return safeCount(v, 0); }
+  let coinType = loadJSON(COIN_TYPE_KEY, 'normal');
+  if (!COIN_TYPES[coinType]) coinType = 'normal';
+  let passive = Object.assign({ springBoot: 0, oilCan: 0, armorPlate: 0 }, loadJSON(PASSIVE_KEY, {}));
+  for (const p of PASSIVE_DEFS){ passive[p.id] = Math.min(PASSIVE_MAX, num0(passive[p.id])); }
+  let suite = Object.assign({ startCoin: 0, startShield: 0, magnetR: 0 }, loadJSON(SUITE_KEY, {}));
+  for (const s of SUITE_DEFS){ suite[s.id] = Math.min(SUITE_MAX, num0(suite[s.id])); }
+  let rushBest = num0(loadJSON(RUSH_KEY, 0));
+  let sprintBest = num0(loadJSON(SPRINT_KEY, 0));
+  let leader = Object.assign({ deepest: 0, fastestB20: 0, rushWins: 0 }, loadJSON(LEADER_KEY, {}));
+  leader.deepest = num0(leader.deepest); leader.fastestB20 = num0(leader.fastestB20); leader.rushWins = num0(leader.rushWins);
+  let customSeed = safeStr(loadJSON(SEED_KEY, ''), '');
+  let gameMode = loadJSON(MODE_KEY, 'normal');
+  if (!['normal', 'rush', 'sprint', 'puzzle'].includes(gameMode)) gameMode = 'normal';
+  // 每日三任務：跨日重置，與每日挑戰分開記錄
+  let dailyTasks = loadJSON(DAILY_TASK_KEY, null);
+  if (!dailyTasks || dailyTasks.date !== todayStr()){
+    dailyTasks = { date: todayStr(), list: TASK_DEFS.map(t => ({ id: t.id, prog: 0, done: false, claimed: false })) };
+    saveJSON(DAILY_TASK_KEY, dailyTasks);
+  }
+
+  // ---- v3.1 每日挑戰：跨日重置顯示 ----
+  function todayStr(){ const d = new Date(); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
+  let dailyMode = false;
+  let dailyBest = 0, dailyDone = false;
+  try {
+    const storedBest = safeNum(localStorage.getItem(DAILY_BEST_KEY), 0);
+    if (localStorage.getItem(DAILY_DATE_KEY) === todayStr()){
+      dailyBest = storedBest;
+      dailyDone = localStorage.getItem(DAILY_DONE_KEY) === '1';
+    } else {
+      // B2：跨日（含時間回撥）重置完成旗標，但歷史最佳取 max 保留
+      dailyBest = storedBest; dailyDone = false;
+      saveJSON(DAILY_DATE_KEY, todayStr()); saveJSON(DAILY_DONE_KEY, '0');
+    }
+  } catch(e){ dailyBest = 0; dailyDone = false; }
+
+  // 修飾詞與 RNG：一般模式 Math.random；每日模式走種子 RNG
+  let rngFn = Math.random;
+  let mod = 'calm';
+
+  // 本局即時資料
+  let run = { segments: 0, gems: 0, launchPower: 0, firstTry: true, streak: 0, bandStreak: 0, arenaDeath: false };
+  let arenaRun = { damaged: false };   // B5：單場競技場無傷旗標（落穴／被追上／碎甲命中即受損）
+  // v4 本局資料
+  let inv = { shield: 0, drill: 0, magnet: 0 };   // 道具持有（自動模式不使用）
+  let dashUsedFlight = 0;                          // 本次飛行二段蓄力次數
+  let dashUsedRun = 0;                             // 本局二段蓄力次數
+  let rerollUsed = 0;                              // 本局重 roll 次數
+  let relicBranch = null;                           // 遺跡房選擇 'left' | 'right'
+  let sprintClock = SPRINT_START_TIME;              // 限時衝剩餘秒數
+  let rushStreak = 0;                              // Boss Rush 連勝場次
+  let rushWonThisRun = 0;
+  let shieldCount = 0;                             // 本局護盾（道具＋被動＋套裝）
+  let modeSeed = null;                             // 殘局／自訂種子
+  let masterSeed = 0;                              // B1：本局主種子，每段由它＋段索引派生獨立 RNG
+  let b20Time = 0;                                 // 抵達 B20 計時（排行榜）
+  let lastPowers = [];        // 最近 20 段力道（統計平均用）
+  let particles = [];
+  let shake = { t: 0, dur: 0, mag: 0 };
+  let toastText = '', toastT = 1;
+  let lastLandSfx = 0, lastClearSfx = 0;
+  let tutorialDone = loadJSON('endlessShinkansen.tutorialDone', false);
+  let firstLaunchDone = loadJSON('endlessShinkansen.firstLaunchDone', false);  // D-1：跨局永久教學旗標
+  let runPaid = new Set();     // 本局已發幣的段索引（重彈／回原段／死亡不重發）
+  let shopLockT = 0;           // 升級購買防連點剩餘秒數
+  let coinJumpT = 0;           // HUD 幣值上跳動畫剩餘秒數
+  let lastItemUse = -1;        // B6：道具使用冷卻（秒，clock 計時）
+  let lastDashUse = -1;        // B7：二段蓄力冷卻
+  let arenaPaid = new Set();   // B8：已發整場競技場獎金的段索引
+  const lastSfx = {};          // B12：同類音效最短間隔計時
+  function sfxThrottle(cat, gap){ const n = clock; if (lastSfx[cat] != null && n - lastSfx[cat] < gap) return false; lastSfx[cat] = n; return true; }
+  const ITEM_COOLDOWN = 0.15;  // 道具使用最短間隔（秒）
+  const DASH_COOLDOWN = 0.20;  // 二段蓄力最短間隔（秒）
+  const TRAIL_MAX = 24;        // B13：殘影同時在場上限
+  const DASH_SPEED_CAP = V_MAX * 1.15;  // B7：補推後速度上限
+
+  // 色票由 CSS 變數讀取（結果圖沿用同色）
+  const css = getComputedStyle(document.documentElement);
+  const col = {};
+  ['bg','fg','sub','rock0','rock1','rock2','rock3','rock4','wall','wall-edge','plank','plank-dark','nail',
+   'lever','lever-line','hole','hole-rim','coin','coin-line','coin-hi','crystal','crystal2','sky','sky-low','hill',
+   'grass','grass-dark','soil','accent-danger','accent-exit','accent-crystal']
+    .forEach(k => col[k] = css.getPropertyValue('--' + k).trim());
+  const FONT = getComputedStyle(document.body).fontFamily;
+
+  function mulberry32(seed){ let a = seed >>> 0; return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const rand = (a, b) => a + rngFn() * (b - a);
+  const pick = arr => arr[Math.floor(rngFn() * arr.length)];
+  function rollModifier(){
+    let total = 0; for (const k of MOD_KEYS) total += MOD_DEFS[k].w;
+    let r = rngFn() * total;
+    for (const k of MOD_KEYS){ r -= MOD_DEFS[k].w; if (r < 0) return k; }
+    return 'calm';
+  }
+
+  // ================= 音效（WebAudio 純合成，首次互動 resume） =================
+  let audioCtx = null;
+  function ensureAudio(){
+    if (settings.muted) return;
+    if (!audioCtx){ try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ audioCtx = null; } }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  }
+  function tone(freq, dur, type, vol, slideTo){
+    if (settings.muted || !audioCtx) return;
+    try {
+      const t0 = audioCtx.currentTime;
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch(e) {}
+  }
+  const sfx = {
+    pull(){ tone(180, 0.08, 'triangle', 0.05, 240); },
+    launch(){ tone(320, 0.16, 'square', 0.07, 620); },
+    land(){ tone(150, 0.07, 'triangle', 0.05, 110); },
+    hole(){ tone(220, 0.3, 'sawtooth', 0.08, 60); },
+    clear(){ tone(440, 0.12, 'triangle', 0.07, 660); },
+    chased(){ tone(180, 0.35, 'sawtooth', 0.09, 70); },
+    boss(){ tone(90, 0.4, 'square', 0.1, 50); },
+    gem(){ if (sfxThrottle('gem', 0.06)) tone(660, 0.12, 'sine', 0.07, 990); },
+    ui(){ if (sfxThrottle('ui', 0.05)) tone(400, 0.05, 'sine', 0.04, 480); },
+    armorBreak(){ if (sfxThrottle('hit', 0.08)){ tone(220, 0.18, 'square', 0.09, 90); tone(140, 0.12, 'triangle', 0.07, 70); } },
+    armorFury(){ if (sfxThrottle('boss', 0.12)) tone(70, 0.4, 'sawtooth', 0.1, 45); },
+    dailyDone(){ tone(523, 0.12, 'triangle', 0.07, 784); tone(784, 0.18, 'triangle', 0.07, 1046); },
+    modEnter(){ if (sfxThrottle('ui', 0.05)) tone(360, 0.1, 'sine', 0.05, 440); }
+  };
+
+  // ================= 圖鑑／成就定義 =================
+  const CODEX = {
+    terrain: [
+      { k: 'none', n: '平坦軌道', d: '單純坡道' },
+      { k: 'kicker', n: '彈台', d: '末端上翹，可能有吊岩' },
+      { k: 'valley', n: '窪地', d: 'V 形凹陷，底部有穴' },
+      { k: 'pitfall', n: '落穴', d: '軌道中斷，失速即墜' },
+      { k: 'spring', n: '彈簧台', d: '著地時額外彈升' },
+      { k: 'stairs', n: '階梯', d: '三段階梯緩衝' }
+    ],
+    event: [
+      { k: 'treasure', n: '寶藏層', d: '藏有寶石，提升蓄力' },
+      { k: 'dark', n: '幽暗層', d: '照明範圍縮小' },
+      { k: 'rocks', n: '岩陣層', d: '多顆吊岩阻路' },
+      { k: 'crystal', n: '結晶層', d: '滾動黏滯，金貨發光' },
+      { k: 'echo', n: '回聲層', d: '照明擴大，留有殘影' }
+    ],
+    boss: [
+      { k: 'rock', n: '石滾', d: '滾動壓迫的岩球' },
+      { k: 'eye', n: '晶眼', d: '結晶飛眼，追擊較慢' },
+      { k: 'armor', n: '護甲獸', d: '三片護甲可免死，碎盡後狂暴' }
+    ],
+    modifier: [
+      { k: 'rich', n: '富礦', d: '不生成寶石，金幣加成' },
+      { k: 'dim', n: '微光', d: '照明縮小，金幣加成' },
+      { k: 'swift', n: '急襲', d: '競技場追擊更快，金幣加成' },
+      { k: 'rockfall', n: '落石', d: '每層多一顆吊岩，金幣加成' }
+    ],
+    mech: [
+      { k: 'ice', n: '冰面', d: '滾動減速大幅降低' },
+      { k: 'wind', n: '風場', d: '沿軌道方向推進' },
+      { k: 'breakRock', n: '可破壞岩', d: '鑽頭可鑽破' },
+      { k: 'pad', n: '緩衝墊', d: '接住墜落並彈回' },
+      { k: 'mover', n: '移動平台', d: '僅手動；自動降級一般段' },
+      { k: 'portal', n: '傳送門', d: '僅手動；成對傳送保留水平速度' },
+      { k: 'rotor', n: '旋槳', d: '僅手動；週期掃過，端點圓碰撞' }
+    ],
+    item: [
+      { k: 'shield', n: '護盾', d: '擋一次落穴或追擊' },
+      { k: 'drill', n: '鑽頭', d: '鑽破一塊可破壞岩' },
+      { k: 'magnet', n: '磁石', d: '吸附半徑內寶石' }
+    ],
+    relic: [
+      { k: 'room', n: '遺跡房', d: '岔路：左寶石／右金幣道具' }
+    ]
+  };
+  const ACHS = [
+    { id: 'power70', n: '巧手', d: '單段以七成以下力道首次過關', target: 1 },
+    { id: 'streak5', n: '五連勝', d: '連續五段首次彈射即過', target: 5 },
+    { id: 'gem3', n: '藏寶', d: '單局集滿三顆寶石', target: 3 },
+    { id: 'b15', n: '深入 B15', d: '抵達 B15', target: 15 },
+    { id: 'b30', n: '深淵 B30', d: '抵達 B30', target: 30 },
+    { id: 'arenaClean', n: '無傷競技場', d: '零死亡通過一場競技場', target: 1 },
+    { id: 'firstBoss', n: '初捷', d: '擊破第一位 Boss', target: 1 },
+    { id: 'boss10', n: '獵人', d: '累積擊破十位 Boss', target: 10 },
+    { id: 'seg50', n: '潛行', d: '累積通過五十段', target: 50 },
+    { id: 'codexHalf', n: '博學', d: '解鎖半數圖鑑條目', target: 1 },
+    { id: 'band3', n: '穩準', d: '連續三段力道落在成功區間中段', target: 3 },
+    { id: 'echo', n: '回聲', d: '造訪回聲層', target: 1 },
+    { id: 'coin500', n: '小財主', d: '累計賺得 500 金幣', target: 500 },
+    { id: 'coin2000', n: '礦王', d: '累計賺得 2000 金幣', target: 2000 },
+    { id: 'upMax', n: '工坊大師', d: '升級全部滿級', target: 1 },
+    { id: 'b40', n: '無底深淵', d: '抵達 B40', target: 40 },
+    { id: 'dailyDone', n: '每日挑戰', d: '完成一場每日挑戰', target: 1 },
+    { id: 'modAll', n: '百變礦工', d: '遇過四種修飾詞', target: 4 },
+    { id: 'seg100', n: '老礦工', d: '累積通過一百段', target: 100 },
+    { id: 'gem5', n: '寶石收藏家', d: '單局集滿五顆寶石', target: 5 },
+    { id: 'mech4', n: '機關探勘', d: '遇過四種機關', target: 4 },
+    { id: 'item3', n: '萬寶囊', d: '使用過三種道具', target: 3 },
+    { id: 'rush2', n: '連勝衛士', d: 'Boss Rush 連勝 2 場', target: 2 },
+    { id: 'relic1', n: '遺跡尋寶', d: '造訪遺跡房', target: 1 }
+  ];
+  function achProgress(id){
+    switch(id){
+      case 'coin500': return Math.min(500, stats.coinTotal);
+      case 'coin2000': return Math.min(2000, stats.coinTotal);
+      case 'upMax': return UPGRADE_DEFS.every(d => upg(d.id) >= d.max) ? 1 : 0;
+      case 'b40': return Math.min(40, stats.deepest);
+      case 'dailyDone': return dailyDone ? 1 : 0;
+      case 'modAll': return MOD_KEYS.filter(k => k !== 'calm' && codex.has('modifier:' + k)).length;
+      case 'seg100': return Math.min(100, stats.segments);
+      case 'gem5': return Math.min(5, run.gems);
+      case 'mech4': return Math.min(4, [...codex].filter(x => x.startsWith('mech:')).length);
+      case 'item3': return Math.min(3, [...codex].filter(x => x.startsWith('item:')).length);
+      case 'rush2': return Math.min(2, rushStreak);
+      case 'relic1': return codex.has('relic:room') ? 1 : 0;
+      case 'streak5': return Math.min(5, run.streak);
+      case 'gem3': return Math.min(3, run.gems);
+      case 'b15': return Math.min(15, stats.deepest);
+      case 'b30': return Math.min(30, stats.deepest);
+      case 'boss10': return Math.min(10, stats.bosses);
+      case 'seg50': return Math.min(50, stats.segments);
+      case 'band3': return Math.min(3, run.bandStreak);
+      default: return ach.has(id) ? 1 : 0;
+    }
+  }
+  function discover(group, key){
+    if (!key || !CODEX[group]) return;
+    if (!CODEX[group].some(e => e.k === key)) return;
+    const id = group + ':' + key;
+    if (!codex.has(id)){ codex.add(id); saveJSON(CODEX_KEY, [...codex]); }
+    const total = Object.values(CODEX).reduce((n, arr) => n + arr.length, 0);
+    if (codex.size >= Math.ceil(total / 2)) unlock('codexHalf');
+  }
+  function unlock(id){
+    if (ach.has(id)) return;
+    ach.add(id); saveJSON(ACH_KEY, [...ach]);
+    const a = ACHS.find(x => x.id === id);
+    if (a){ toastText = '成就解鎖：' + a.n; toastT = 0; }
+  }
+  function persistSettings(){ saveJSON(SETTINGS_KEY, settings); }
+
+  // ---- v4 金貨型態存取器（trial／實機共用） ----
+  function coinTypeDef(){ return COIN_TYPES[coinType] || COIN_TYPES.normal; }
+  // v4 被動槽效果（跨局等級，與升級樹分開；僅作用於手動發射／二段／起始護盾，不進 simStep／trial）
+  // 彈簧靴：每級發射初速 +3%（僅手動 flick 路徑）
+  function springLaunchMult(){ return 1 + 0.03 * passive.springBoot; }
+  // 油壺：每 2 級二段蓄力 +1 次（僅手動 dash）
+  function dashBonus(){ return Math.floor(passive.oilCan / 2); }
+  function upg(id){ return upgrades[id] || 0; }
+  function coinMult(){ return 1 + 0.15 * upg('coin'); }
+  function startPowerBase(){ return [0, 0.12, 0.20, 0.28][upg('startPower')]; }
+  function gemCapVal(){ return [0.24, 0.36, 0.48, 0.60][upg('gemCap')]; }
+  function bossSlowBonus(){ return Math.min(4.5, 1.5 * upg('bossSlow')); }
+  function lightBonus(){ return [1, 1.15, 1.30, 1.45][upg('light')]; }
+  function previewUnlocked(){ return upg('preview') >= 1; }
+  function previewPointCount(){ return [40, 60, 80, 100][Math.max(0, Math.min(3, upg('boost')))]; }
+  function cutFastTime(){ return CUT_FAST_TIME[upg('cutFast')] || CUT_TIME; }
+  function guardSegLimit(){ return GUARD_SEG_LIMIT[Math.max(0, upg('guard') - 1)] || 0; }
+  function guardUseLimit(){ return GUARD_USE_LIMIT[Math.max(0, upg('guard') - 1)] || 0; }
+  function gemCoinValue(){ return GEM_COIN_VALUE[upg('gemCoin') - 1] || 0; }
+  function upgDesc(def){
+    const lv = upg(def.id);
+    switch(def.id){
+      case 'preview': return lv === 0 ? '解鎖蓄力預測弧' : '已解鎖預測弧';
+      case 'boost': return previewUnlocked() ? '弧取樣點 ' + previewPointCount() : '需先解鎖輔助線';
+      case 'coin': return '金幣 +' + (lv * 15) + '%';
+      case 'startPower': return '起始力道 ' + [0, 12, 20, 28][lv] + '%';
+      case 'gemCap': return '寶石上限 ' + [24, 36, 48, 60][lv] + '%';
+      case 'bossSlow': return '追擊時間 +' + (lv * 1.5).toFixed(1) + 's';
+      case 'light': return '幽暗照明 ×' + [1, 1.15, 1.30, 1.45][lv].toFixed(2);
+      case 'gemCoin': return lv === 0 ? '未拾取寶石折算金幣' : '每顆未拾取寶石 +' + GEM_COIN_VALUE[lv - 1] + ' 金幣';
+      case 'guard': return lv === 0 ? '前段落穴免死保護' : '前 ' + GUARD_SEG_LIMIT[lv - 1] + ' 段免死 ×' + GUARD_USE_LIMIT[lv - 1];
+      case 'cutFast': return '過場 ' + CUT_FAST_TIME[lv].toFixed(1) + 's';
+    }
+    return '';
+  }
+
+  // ================= 盤面生成 =================
+  const SLOPE_TYPES = ['straight', 'twostep'];
+  const FEATURES = ['none', 'kicker', 'kicker', 'valley', 'valley', 'pitfall', 'pitfall', 'spring', 'stairs'];
+  const FAR_TYPES = ['up', 'down'];
+
+  function polyH(pts, d){
+    if (d <= pts[0][0]) return pts[0][1];
+    for (let i = 1; i < pts.length; i++){
+      const [d0, h0] = pts[i - 1], [d1, h1] = pts[i];
+      if (d <= d1) return h0 + (h1 - h0) * (d - d0) / (d1 - d0);
+    }
+    return pts[pts.length - 1][1];
+  }
+  function polyCut(pts, from, to){
+    const out = [[from, polyH(pts, from)]];
+    for (const p of pts) if (p[0] > from && p[0] < to) out.push(p);
+    out.push([to, polyH(pts, to)]);
+    return out;
+  }
+
+  function randomLevel(k, prev){
+    // B1：本段使用獨立種子 RNG（主種子＋段索引＋重試次數）；結束後還原全域 RNG
+    const savedRng = rngFn;
+    rngFn = mulberry32(segSeed(masterSeed, k));
+    const side = k % 2 === 0 ? -1 : 1;
+    const dir = -side;
+    const wx = side < 0 ? 0 : BOARD_W;
+    const simple = k < SIMPLE_LEVELS || (failK === k && failN >= FAIL_SIMPLE);
+    // 樓層分類：先判斷 Boss 競技場（10 段連續），其餘為寶藏／隨機事件
+    const CYCLE = ARENA_GAP + ARENA_LEN;
+    const pos = k % CYCLE;
+    const occ = Math.floor(k / CYCLE);
+    let arena = null;
+    let world = k + 1 - ARENA_GAP * occ;
+    if (pos >= ARENA_GAP){
+      const seg = pos - ARENA_GAP + 1;
+      const floorNo = (occ + 1) * ARENA_FLOOR;
+      arena = { seg, total: ARENA_LEN, exit: seg >= ARENA_LEN, floorNo, bossType: ['rock', 'eye', 'armor'][occ % 3] };
+      world = floorNo;
+    }
+    let event = null;
+    if (!arena){
+      if (world % TREASURE_EVERY === 0) event = 'treasure';
+      else {
+        const er = rngFn();
+        const r1 = DARK_EVENT_RATE, r2 = r1 + ROCKS_EVENT_RATE, r3 = r2 + CRYSTAL_EVENT_RATE, r4 = r3 + ECHO_EVENT_RATE;
+        if (er < r1) event = 'dark';
+        else if (er < r2) event = 'rocks';
+        else if (er < r3) event = 'crystal';
+        else if (er < r4) event = 'echo';
+      }
+    }
+    let slopeType = simple ? 'straight' : pick(SLOPE_TYPES);
+    let feature = simple ? 'none' : pick(FEATURES);
+
+    const landD = prev ? BOARD_W - prev.gapPos : 0;
+    const featFrom = Math.max(landD + LAND_MARGIN, BOARD_W * 0.2);
+    const kickLen = rand(KICK_LEN_MIN, KICK_LEN_MAX);
+    const vw = rand(VALLEY_W_MIN, VALLEY_W_MAX);
+    const pw = rand(PIT_W_MIN, PIT_W_MAX);
+    const span = f => ({ none: 0, kicker: kickLen + 12, valley: vw * 2 + 35, pitfall: pw + PIT_AFTER + 5, spring: 26, stairs: 40 })[f] || 0;
+    let lo0 = GAP_POS_MIN * BOARD_W;
+    if (prev) lo0 = Math.max(lo0, BOARD_W - prev.gapPos + GAP_MARGIN);
+    const hiF = BOARD_W - FAR_MIN_LEN - GAP_W_MAX / 2;
+    const fits = f => f === 'none' || Math.max(lo0, featFrom + span(f) + GAP_W_MAX / 2) <= hiF;
+    if (!fits(feature)){ const ok = FEATURES.filter(f => f !== 'none' && fits(f)); feature = ok.length ? pick(ok) : 'none'; }
+    let farType = simple ? 'up' : pick(FAR_TYPES);
+    if (feature === 'kicker') farType = 'up';
+    if (feature === 'valley') farType = 'down';
+    if (event === 'treasure'){ feature = 'none'; slopeType = 'straight'; farType = 'up'; }
+    if (arena){ slopeType = 'straight'; if (feature !== 'kicker') feature = 'none'; farType = 'up'; }
+    const lo = feature === 'none' ? Math.min(GAP_POS_MAX * BOARD_W, lo0) : Math.max(lo0, featFrom + span(feature) + GAP_W_MAX / 2);
+    const gapPos = rand(lo, Math.max(lo, feature === 'none' ? GAP_POS_MAX * BOARD_W : hiF));
+    const gw = rand(GAP_W_MIN, GAP_W_MAX);
+    const g0 = gapPos - gw / 2, g1 = gapPos + gw / 2;
+
+    const tan = deg => Math.tan(deg * Math.PI / 180);
+    if (feature === 'pitfall') slopeType = 'straight';
+    const s1 = tan(feature === 'pitfall' ? rand(PIT_SLOPE_MIN, PIT_SLOPE_MAX) : event === 'treasure' ? rand(SLOPE_MIN, 8) : rand(SLOPE_MIN, SLOPE_MAX));
+    let base = [[0, 0], [BOARD_W, BOARD_W * s1]];
+    if (slopeType === 'twostep'){
+      const d1 = rand(0.35, 0.65) * g0;
+      const steep = () => tan(rand(TWOSTEP_STEEP_MIN, TWOSTEP_STEEP_MAX)), gentle = () => tan(rand(SLOPE_MIN, SLOPE_MIN + 2));
+      const [a1, a2] = rngFn() < 0.5 ? [gentle(), steep()] : [steep(), gentle()];
+      base = [[0, 0], [d1, d1 * a1], [BOARD_W, d1 * a1 + (BOARD_W - d1) * a2]];
+    }
+
+    // 機關
+    let near = polyCut(base, 0, g0);
+    let kickFrom = g0, rock = null, trap = null, spring = null;
+    const blocked = [];
+    if (feature === 'kicker'){
+      const len = kickLen;
+      if (g0 - len > featFrom + 10){
+        kickFrom = g0 - len;
+        const hk = polyH(base, kickFrom);
+        near = [...polyCut(base, 0, kickFrom), [g0, hk + len * tan(rand(KICK_SLOPE_MIN, KICK_SLOPE_MAX))]];
+        blocked.push([kickFrom - 10, g0]);
+        if (rngFn() < ROCK_RATE){
+          const d = g0 + rand(-10, 30), r = rand(ROCK_R_MIN, ROCK_R_MAX);
+          rock = { d, r, h: polyH(near, g0) + rand(ROCK_UP_MIN, ROCK_UP_MAX) + r };
+        }
+      } else feature = 'none';
+    } else if (feature === 'valley'){
+      const dvMin = featFrom + vw + 10, dvMax = g0 - vw - 25;
+      if (dvMax > dvMin){
+        const dv = rand(dvMin, dvMax);
+        const hl = polyH(base, dv - vw), hm = polyH(base, dv), hr = polyH(base, dv + vw);
+        const bottom = Math.min(hl, hm) - rand(VALLEY_DEPTH_MIN, VALLEY_DEPTH_MAX);
+        near = [...polyCut(base, 0, dv - vw), [dv, bottom], ...polyCut(base, dv + vw, g0)];
+        blocked.push([dv - vw - 20, dv + vw + 20]);
+        feature = { type: 'valley', dv, vw };
+      } else feature = 'none';
+    } else if (feature === 'pitfall'){
+      const pdMin = featFrom + pw / 2 + 10, pdMax = g0 - pw / 2 - PIT_AFTER;
+      if (pdMax > pdMin){
+        const pd = rand(pdMin, pdMax);
+        trap = { d0: pd - pw / 2, d1: pd + pw / 2 };
+        blocked.push([trap.d0 - 25, trap.d1 + 25]);
+      } else feature = 'none';
+    } else if (feature === 'spring'){
+      const dsMin = featFrom + 12, dsMax = g0 - 20;
+      if (dsMax > dsMin){
+        const ds = rand(dsMin, dsMax);
+        spring = { d0: ds - SPRING_PAD_HALF, d1: ds + SPRING_PAD_HALF, boost: rand(SPRING_BOOST_MIN, SPRING_BOOST_MAX) };
+        blocked.push([spring.d0 - 12, spring.d1 + 12]);
+      } else feature = 'none';
+    } else if (feature === 'stairs'){
+      const stMin = featFrom + 16, stMax = g0 - 16;
+      if (stMax > stMin){
+        const z1 = stMin + (stMax - stMin) * 0.33, z2 = stMin + (stMax - stMin) * 0.66;
+        near = [[0, polyH(base, 0)], [z1, polyH(base, z1) + STAIRS_RISE1], [z2, polyH(base, z2) + STAIRS_RISE2], [g0, polyH(base, g0)]];
+        blocked.push([stMin - 10, stMax + 10]);
+      } else feature = 'none';
+    }
+    const featureType = typeof feature === 'string' ? feature : feature.type;
+
+    const farStartH = polyH(base, g1);
+    const far = farType === 'up'
+      ? [[g1, farStartH], [BOARD_W, polyH(base, BOARD_W)]]
+      : [[g1, farStartH], [BOARD_W, Math.max(FAR_DOWN_MIN_H, farStartH - (BOARD_W - g1) * tan(rand(FAR_DOWN_MIN, FAR_DOWN_MAX)))]];
+    const hAt = d => d <= g0 ? polyH(near, d) : polyH(far, d);
+    const allPts = [...near, ...far];
+    let maxH = Math.max(...allPts.map(p => p[1]));
+    if (rock) maxH = Math.max(maxH, rock.h + rock.r);
+
+    const extraRocks = [];
+    if (event === 'rocks'){
+      const n = rngFn() < 0.5 ? 1 : 2;
+      for (let i = 0; i < n; i++){
+        const dMin = featFrom + 15, dMax = g0 - 30;
+        if (dMax <= dMin) break;
+        const d = rand(dMin, dMax), r = rand(ROCK_R_MIN, ROCK_R_MAX);
+        extraRocks.push({ d, r, h: polyH(base, d) + rand(ROCK_UP_MIN, ROCK_UP_MAX) + r });
+      }
+    }
+    // N3 落石修飾詞：一般層每層額外吊岩（進入 lv.rocks，trial 碰撞共用）
+    if (mod === 'rockfall' && !arena){
+      for (let i = 0; i < MOD_ROCKFALL_EXTRA; i++){
+        const dMin = featFrom + 15, dMax = g0 - 30;
+        if (dMax <= dMin) break;
+        const d = rand(dMin, dMax), r = rand(ROCK_R_MIN, ROCK_R_MAX);
+        extraRocks.push({ d, r, h: polyH(base, d) + rand(ROCK_UP_MIN, ROCK_UP_MAX) + r });
+      }
+    }
+
+    const yLow = prev ? prev.a.y + maxH + rand(CLEAR_MIN, CLEAR_MAX) : 0;
+    const pt = d => ({ x: wx + dir * d, y: yLow - hAt(d) });
+    const poly = pts => pts.map(([d, h]) => ({ x: wx + dir * d, y: yLow - h }));
+    const toSegs = ps => ps.slice(1).map((q, i) => ({ a: ps[i], b: q }));
+    const nearParts = trap ? [polyCut(near, 0, trap.d0), polyCut(near, trap.d1, g0)] : [near];
+    const segs = [...nearParts.flatMap(pp => toSegs(poly(pp))), ...toSegs(poly(far))];
+
+    const normalAt = d => {
+      const e = 0.5, q0 = pt(Math.max(0, d - e)), q1 = pt(Math.min(BOARD_W, d + e));
+      const tx = q1.x - q0.x, ty = q1.y - q0.y, l = Math.hypot(tx, ty);
+      let nx = ty / l, ny = -tx / l;
+      if (ny > 0){ nx = -nx; ny = -ny; }
+      return { x: nx, y: ny };
+    };
+    const a = pt(0);
+    const q1 = pt(Math.min(near[1][0], 20));
+    const tl = Math.hypot(q1.x - a.x, q1.y - a.y);
+    const t = { x: (q1.x - a.x) / tl, y: (q1.y - a.y) / tl };
+
+    const holes = [];
+    const onRail = (d, r) => { const q = pt(d), n = normalAt(d); return { x: q.x + n.x * COIN_R, y: q.y + n.y * COIN_R, r }; };
+    if (featureType === 'valley'){
+      const v = pt(feature.dv), pl = pt(feature.dv - feature.vw), pr = pt(feature.dv + feature.vw);
+      const u = q => { const x = q.x - v.x, y = q.y - v.y, l = Math.hypot(x, y); return { x: x / l, y: y / l }; };
+      const u1 = u(pl), u2 = u(pr), bx = u1.x + u2.x, by = u1.y + u2.y, bl = Math.hypot(bx, by);
+      const sinA = Math.abs(u1.x * by - u1.y * bx) / bl;
+      const dist = COIN_R / sinA;
+      holes.push({ x: v.x + bx / bl * dist, y: v.y + by / bl * dist, r: VALLEY_HOLE_R, valley: true });
+    }
+    if (trap){
+      const p0 = pt(trap.d0), p1 = pt(trap.d1);
+      const top = Math.max(p0.y, p1.y);
+      holes.push({ trap: true, x0: Math.min(p0.x, p1.x), x1: Math.max(p0.x, p1.x), yTop: top,
+                   x: (p0.x + p1.x) / 2, y: top + 6, r: Math.abs(p1.x - p0.x) / 2 + 3 });
+    }
+    const midTo = g0 - MID_HOLE_GAP / 2;
+    const ms = [];
+    const want = event === 'treasure' ? 0 : Math.floor(rngFn() * (MID_HOLES_MAX + 1)) + (featureType === 'none' ? 1 : 0);
+    for (let i = 0; i < want * 8 && ms.length < want && midTo > featFrom; i++){
+      const d = rand(featFrom, midTo);
+      if (ms.every(e => Math.abs(e - d) >= MID_HOLE_GAP) && blocked.every(([b0, b1]) => d < b0 || d > b1)) ms.push(d);
+    }
+    for (const d of ms) holes.push(onRail(d, rand(HOLE_R_MIN, HOLE_R_MAX)));
+    holes.push(Object.assign(onRail(BOARD_W - COIN_R, rand(HOLE_R_MIN, HOLE_R_MAX)), { wall: true }));
+
+    const rocks = [];
+    if (rock) rocks.push({ x: wx + dir * rock.d, y: yLow - rock.h, r: rock.r });
+    for (const er of extraRocks) rocks.push({ x: wx + dir * er.d, y: yLow - er.h, r: er.r });
+
+    const s0 = (near[1][1] - near[0][1]) / (near[1][0] - near[0][0]);
+    const rest = { x: wx - side * COIN_R, y: pt(COIN_R).y - COIN_R * Math.sqrt(1 + s0 * s0) };
+
+    // 寶藏層寶石：3 顆置於軌道上方
+    let gems = [];
+    if (event === 'treasure' && mod !== 'rich'){
+      for (let i = 0; i < GEM_PER_LEVEL; i++){
+        const d = BOARD_W * (0.18 + 0.64 * (i / (GEM_PER_LEVEL - 1)));
+        const q = pt(d);
+        gems.push({ d, x: q.x, y: q.y - COIN_R - 4, taken: false });
+      }
+    }
+
+    // v4 遺跡房岔路：每 8 層一岔；左右雙側皆生成獎勵區，待玩家到岔點選擇後封閉另一側
+    let relic = null;
+    if (!arena && world % RELIC_EVERY === 0){
+      relic = { branch: null, closed: null, item: rollRelicItem() };
+    }
+
+    // ---- v4 機關：安全四項進自動生成池；mover/portal/rotor 僅手動，自動降級一般段 ----
+    let mech = null;
+    let decelMult = event === 'crystal' ? CRYSTAL_DECEL_MULT : 1;
+    if (!arena && event !== 'treasure' && !simple){
+      let m = null;
+      if (rngFn() < MECH_RATE) m = pick(['ice', 'wind', 'breakRock', 'pad']);
+      else if (!auto && rngFn() < MECH_MANUAL_RATE) m = pick(['mover', 'portal', 'rotor']);
+      const md = rand(featFrom + 18, Math.max(featFrom + 20, g0 - 20));
+      if (m === 'ice'){
+        mech = { type: 'ice' };
+        decelMult *= MECH_ICE_DECEL;
+      } else if (m === 'wind'){
+        mech = { type: 'wind', d0: md, d1: Math.min(g0, md + MECH_WIND_LEN), dir: dir };
+      } else if (m === 'breakRock'){
+        const br = rand(ROCK_R_MIN, ROCK_R_MAX);
+        rocks.push({ x: wx + dir * md, y: yLow - polyH(base, md) - rand(ROCK_UP_MIN, ROCK_UP_MAX) - br, r: br, breakable: true, hp: MECH_BREAK_HP });
+        mech = { type: 'breakRock' };
+      } else if (m === 'pad'){
+        mech = { type: 'pad', d0: md - 16, d1: md + 16, used: false };
+      } else if (m === 'mover'){
+        mech = { type: 'mover', d0: md - 16, d1: md + 16, t: 0, phase: rand(0, Math.PI * 2) };
+      } else if (m === 'portal'){
+        mech = { type: 'portal', a: Math.max(featFrom, md - 22), b: Math.min(g0, md + 22), t: 0, cd: 0 };
+      } else if (m === 'rotor'){
+        mech = { type: 'rotor', d: md, t: 0, phase: rand(0, Math.PI * 2) };
+      }
+    }
+
+    rngFn = savedRng;
+    return { side, a, t, topY: yLow - maxH, segs, holes, rocks, rest, gapPos, slopeType, featureType, farType,
+             event, arena, world, spring, gems, mech, relic, decelMult };
+  }
+
+  // ---- 配置生成（跨幀漸進，保留既有求解／後備語意） ----
+  let failK = -1, failN = 0;
+  function noteFail(k){ if (failK === k) failN++; else { failK = k; failN = 1; } }
+  function retryLevel(k){
+    noteFail(k);
+    if (failN >= FAIL_BACK && k - 1 > here + 1){
+      levels.pop();
+      failK = k - 1; failN = FAIL_SIMPLE;
+      gen = null;
+      return true;
+    }
+    if (failN >= FAIL_GIVEUP) return false;
+    gen = null;
+    return true;
+  }
+  let gen = null;
+  let genBudget = GEN_TRIALS_PER_FRAME;   // R1：單幀 trial 計數後備；主上限為 genDeadline 時間片
+  let genDeadline = 0;                    // R1：本幀生成截止時刻（performance.now 時間戳，僅排程）
+  function genStep(){
+    const k = levels.length, prev = levels[k - 1];
+    if (!gen || gen.k !== k) gen = { k, tries: 0, pick: null, score: Infinity, center: undefined, cand: null };
+    if (gen.verify){ verifyStep(); return; }
+    if (!gen.cand){
+      gen.cand = randomLevel(k, prev);
+      Object.assign(gen, { p: WIN_STEP, w: 0, landMin: Infinity, landMax: -Infinity, sw: 0, ssum: 0, smin: Infinity, smax: -Infinity, sstrong: false, sstuck: false });
+    }
+    levels.push(gen.cand);
+    do {
+      if (genBudget <= 0 || performance.now() >= genDeadline) return;  // R1：額度或時間片用盡，保留狀態下幀續跑
+      const res = trial(k - 1, gen.p / 100);
+      genBudget--;
+      if (res === 'landhole' && (trialLandHole.valley || trialLandHole.trap)){
+        gen.cand = null; levels.pop(); gen.tries++; return;
+      }
+      if (res === 'landhole'){
+        gen.cand.holes = gen.cand.holes.filter(h => h !== trialLandHole);
+        Object.assign(gen, { p: WIN_STEP, w: 0, landMin: Infinity, landMax: -Infinity, sw: 0, ssum: 0, smin: Infinity, smax: -Infinity, sstrong: false, sstuck: false });
+        continue;
+      }
+      gen.landMin = Math.min(gen.landMin, trialLandMin); gen.landMax = Math.max(gen.landMax, trialLandMax);
+      if (res === 'next') gen.w += WIN_STEP;
+      const self = trial(k, gen.p / 100);
+      genBudget--;
+      if (self === 'lost'){
+        gen.sw += WIN_STEP; gen.ssum += gen.p;
+        gen.smin = Math.min(gen.smin, gen.p); gen.smax = Math.max(gen.smax, gen.p);
+        if (gen.p >= STRONG_FROM) gen.sstrong = true;
+      }
+      if (self === 'stuck') gen.sstuck = true;
+      gen.p += WIN_STEP;
+    } while (gen.p <= 100);
+    levels.pop();
+    if (gen.p <= 100) return;
+
+    if (gen.landMin <= gen.landMax){
+      gen.cand.holes = gen.cand.holes.filter(h => h.wall || h.valley || h.trap || h.x + h.r < gen.landMin - LAND_PAD || h.x - h.r > gen.landMax + LAND_PAD);
+    }
+
+    const winLo = kk => WIN_MIN0 + (WIN_MIN_END - WIN_MIN0) * Math.min(1, kk / WIN_LEVELS);
+    const winHi = kk => WIN_MAX0 + (WIN_MAX_END - WIN_MIN0) * Math.min(1, kk / WIN_LEVELS);
+    const c = gen.sw ? gen.ssum / (gen.sw / WIN_STEP) : 0;
+    let score = 0;
+    if (gen.w < Math.min(winLo(k - 1), prev.selfW || Infinity)) score += 100;
+    if (gen.sw < winLo(k)) score += 200 + (winLo(k) - gen.sw);
+    if (gen.sstuck) score += 200;
+    if (gen.sstrong) score += 50;
+    score += Math.max(0, gen.sw - winHi(k));
+    if (prev.selfCenter !== undefined && prev.selfCenter >= gen.smin - SHIFT_MIN / 2 && prev.selfCenter <= gen.smax + SHIFT_MIN / 2) score += 60;
+    if (gen.cand.featureType === 'none' || gen.cand.featureType === prev.featureType) score += VARIETY_PENALTY;
+    if (score < gen.score){ gen.pick = gen.cand; gen.score = score; gen.center = c; gen.pickSW = gen.sw; }
+    gen.cand = null;
+    gen.tries++;
+    if (gen.score === 0 || (gen.tries >= VARIETY_TRIES && gen.score <= VARIETY_PENALTY) || gen.tries >= GEN_TRIES){
+      if (gen.score >= 100 && retryLevel(k)) return;
+      gen.verify = { p: 1, min: Infinity, max: -Infinity };
+    }
+  }
+
+  function verifyStep(){
+    const k = gen.k, v = gen.verify;
+    if (levels[levels.length - 1] !== gen.pick) levels.push(gen.pick);
+    let bad = false;
+    do {
+      if (genBudget <= 0 || performance.now() >= genDeadline) return;  // R1：額度或時間片用盡下幀續跑
+      const res = trial(k - 1, v.p / 100);
+      genBudget--;
+      if (res === 'stuck' || (res === 'landhole' && (trialLandHole.valley || trialLandHole.trap))){ bad = true; break; }
+      if (res === 'landhole') gen.pick.holes = gen.pick.holes.filter(h => h !== trialLandHole);
+      else { v.min = Math.min(v.min, trialLandMin); v.max = Math.max(v.max, trialLandMax); v.p++; }
+    } while (v.p <= 100);
+    levels.pop();
+    if (bad && retryLevel(k)) return;
+    if (v.p <= 100) return;
+    if (v.min <= v.max){
+      const near = (h, pad) => h.trap ? !(h.x1 < v.min - pad || h.x0 > v.max + pad) : !(h.x + h.r < v.min - pad || h.x - h.r > v.max + pad);
+      if (gen.pick.holes.some(h => (h.valley || h.trap) && near(h, LAND_PAD_FEATURE)) && retryLevel(k)) return;
+      gen.pick.holes = gen.pick.holes.filter(h => h.wall || h.valley || h.trap || !near(h, LAND_PAD));
+    }
+    gen.pick.selfCenter = gen.center;
+    gen.pick.selfW = gen.pickSW;
+    gen.pick.selfMin = gen.smin;
+    gen.pick.selfMax = gen.smax;
+    levels.push(gen.pick);
+    gen = null;
+  }
+  function ensureLevels(need){
+    while (levels.length < here + need && genBudget > 0 && performance.now() < genDeadline) genStep();
+  }
+
+  function placeAt(i){
+    const r = levels[i].rest;
+    coin = { x: r.x, y: r.y, vx: 0, vy: 0, still: 0, springUsed: false };
+    trail = [];
+  }
+
+  function seedFromString(s){ let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  // B1：段內容 = 主種子 ⊕ 段索引 ⊕ 重試次數 的純函數；每段自帶獨立 mulberry32，不讀 wall clock
+  function segSeed(master, k){
+    let h = (master >>> 0) ^ Math.imul((k >>> 0) + 1, 2654435761);
+    h = Math.imul(h ^ (h >>> 13), 2246822519);
+    h ^= h >>> 16;
+    return h >>> 0;
+  }
+  function reset(){
+    // RNG：每日／殘局／自訂種子走 seeded；一般模式維持原本隨機
+    // B1：先算主種子，段內容由主種子＋段索引派生，生成決策不讀 wall clock
+    if (dailyMode) masterSeed = parseInt(todayStr(), 10) || 1;
+    else if (gameMode === 'puzzle' && modeSeed != null) masterSeed = modeSeed;
+    else if (customSeed) masterSeed = seedFromString(customSeed);
+    else masterSeed = Math.floor(Math.random() * 1e9);
+    gen = null;   // B1：先清空生成器殘留，段種子不得吃到上一局的 tries
+    rngFn = (dailyMode || (gameMode === 'puzzle' && modeSeed != null) || customSeed) ? mulberry32(masterSeed) : Math.random;
+    mod = rollModifier();
+    if (mod !== 'calm') discover('modifier', mod);
+    here = 0;
+    levels = [randomLevel(0, null)];
+    gen = null;
+    genBudget = GEN_TRIALS_PER_FRAME;
+    genDeadline = performance.now() + GEN_FRAME_MS * 3;  // R1：開場時間片放寬至 9ms，其餘由長跑幀續補
+    ensureLevels(LEVELS_START);
+    if (gameMode === 'puzzle'){
+      ensureLevels(RELIC_START_FLOOR + ARENA_LEN + 2);
+      let target = levels.findIndex(lv => !lv.arena && lv.world === RELIC_START_FLOOR);
+      if (target < 0) target = levels.findIndex(lv => !lv.arena && lv.world >= RELIC_START_FLOOR);
+      here = Math.max(0, Math.min(target >= 0 ? target : RELIC_START_FLOOR - 1, levels.length - 1));
+    }
+    placeAt(here);
+    power = 0; acc = 0; charging = false; chargeSource = null;
+    autoRetryT = 0; autoStallT = 0; autoTarget = 0;
+    autoSol.clear(); autoFail.clear(); autoSolver = null; autoLastLaunch = -1;
+    boss = null;
+    banner.t = banner.dur;
+    state = 'play';
+    camY = coin.y - viewH() * COIN_SCREEN_Y;
+    run = { segments: 0, gems: 0, launchPower: 0, firstTry: true, streak: 0, bandStreak: 0, arenaDeath: false, guardUses: 0, firstLaunch: false };
+    arenaRun = { damaged: false };
+    toastText = ''; shopLockT = 0;
+    // v4 本局資料初始化
+    shieldCount = suite.startShield * SUITE_DEFS[1].per + passive.armorPlate;
+    inv = { shield: shieldCount, drill: 0, magnet: 0 };
+    if (inv.shield > 0) discover('item', 'shield');
+    dashUsedFlight = 0; dashUsedRun = 0; rerollUsed = 0; relicBranch = null;
+    sprintClock = SPRINT_START_TIME; rushStreak = 0; rushWonThisRun = 0; b20Time = 0;
+    if (suite.startCoin > 0){ const sc = suite.startCoin * SUITE_DEFS[0].per; coins = Math.max(0, Math.min(1e9, Math.floor(coins + sc))); saveJSON(COINS_KEY, coins); }
+    if (mod !== 'calm'){ showBanner(MOD_DEFS[mod].n + '修飾'); sfx.modEnter(); }
+    lastPowers = [];
+    particles = [];
+    shake = { t: 0, dur: 0, mag: 0 };
+    runPaid = new Set();
+    arenaPaid = new Set();
+    coinJumpT = 0; lastItemUse = -1; lastDashUse = -1;
+    stats.runs = safeCount(stats.runs + 1, 0);  // R5：遞增後再夾制，避免 read-modify-write 越界
+    saveJSON(STATS_KEY, stats);
+    $('over').classList.add('hidden');
+  }
+
+  // ================= 自動遊玩（保留既有求解器與快取語意） =================
+  function autoPickPower(){
+    const lv = levels[here];
+    if (lv){
+      if (lv.selfMin !== undefined && lv.selfMax !== undefined && lv.selfMax > lv.selfMin){
+        return Math.max(0.05, Math.min(1, (lv.selfMin + lv.selfMax) / 200));
+      }
+      if (lv.selfCenter !== undefined && isFinite(lv.selfCenter)){
+        return Math.max(0.05, Math.min(1, lv.selfCenter / 100));
+      }
+    }
+    return 0.55;
+  }
+  function solverStart(k){
+    return { k, phase: 'coarse', p: 0.10, coarseWinners: [], fineWinners: [], fineLo: 0, fineHi: 0, solution: null };
+  }
+  function solverStep(s, until){
+    if (s.phase === 'coarse'){
+      do {
+        if (performance.now() >= until) return 'working';  // R1：求解同樣受時間片節制
+        if (trial(s.k, s.p) === 'next') s.coarseWinners.push(s.p);
+        s.p += 0.05;
+      } while (s.p <= 1.001);
+      if (s.p <= 1.001) return 'working';
+      if (s.coarseWinners.length){
+        const w = s.coarseWinners[0];
+        s.fineLo = Math.max(0.05, w - 0.06); s.fineHi = Math.min(1, w + 0.06);
+        s.p = s.fineLo; s.phase = 'fine';
+      } else {
+        s.p = 0.05; s.phase = 'finefull';
+      }
+    }
+    if (s.phase === 'fine' || s.phase === 'finefull'){
+      const hi = s.phase === 'fine' ? s.fineHi : 1.0;
+      do {
+        if (performance.now() >= until) return 'working';  // R1：求解時間片節制
+        if (trial(s.k, s.p) === 'next') s.fineWinners.push(+s.p.toFixed(2));
+        s.p += 0.01;
+      } while (s.p <= hi + 1e-6);
+      if (s.p <= hi + 1e-6) return 'working';
+      if (s.fineWinners.length){
+        s.solution = s.fineWinners[Math.floor((s.fineWinners.length - 1) / 2)];
+        return 'solved';
+      }
+      return 'none';
+    }
+    return 'none';
+  }
+  function autoUpdate(dt){
+    if (!auto) return;
+    if (state === 'over'){   // 結算後僅計時自動重開，不進入求解／蓄力
+      autoRetryT += dt;
+      if (autoRetryT >= 1.0){ autoRetryT = 0; reset(); }
+      return;
+    }
+    if (state !== 'play') return;
+    if (boss && boss.mode === 'cut') return;
+
+    if (autoSolver){
+      const res = solverStep(autoSolver, performance.now() + 5);
+      if (res === 'working') return;
+      if (res === 'solved') autoSol.set(autoSolver.k, autoSolver.solution);
+      else if (res === 'none') autoFail.add(autoSolver.k);
+      autoSolver = null;
+    }
+
+    if (charging){
+      if (power >= autoTarget){ power = autoTarget; flick(); }
+      return;
+    }
+    if (!atLever(here)) return;
+    if (Math.hypot(coin.vx, coin.vy) >= REST_V || coin.still <= REST_TIME) return;
+
+    if (here === autoLastLaunch && autoSol.has(here)){
+      autoSol.delete(here);
+      autoLastLaunch = -1;
+    }
+    let p = autoSol.get(here);
+    if (p !== undefined){
+      if (trial(here, p) !== 'next'){ autoSol.delete(here); p = undefined; }
+    }
+    if (p === undefined && autoFail.has(here)) p = autoPickPower();
+    // R3：兜底力道發射前再驗證；非 next 則不硬擲，交回求解器分幀重算（不在單幀全掃 trial）
+    if (p !== undefined && trial(here, p) !== 'next') p = undefined;
+
+    if (p !== undefined){
+      const r = levels[here].rest;
+      coin.x = r.x; coin.y = r.y; coin.vx = 0; coin.vy = 0; coin.still = 0;
+      autoTarget = p;
+      autoLastLaunch = here;
+      autoStallT = 0;
+      startCharge(false);
+    } else if (!autoSolver){
+      // R3：本段已確認無解且兜底力道亦不過驗，靜止逾時即安全重開，不硬擲、不卡段
+      if (autoFail.has(here)){
+        autoStallT += dt;
+        if (autoStallT >= AUTO_STALL_S){ autoStallT = 0; autoRetryT = 0; reset(); return; }
+      } else {
+        autoStallT = 0;
+        autoSolver = solverStart(here);
+      }
+    }
+  }
+
+  // ================= 操作 =================
+  function startCharge(manual){
+    if (state !== 'play' || charging) return;
+    if (boss && boss.mode === 'cut') return;
+    if (panelOpen()) return;
+    ensureAudio();
+    charging = true;
+    power = manual ? startPowerBase() : 0;
+    sfx.pull();
+  }
+  function launch(c, k, p){
+    const lv = levels[k];
+    const vmax = V_MAX * coinTypeDef().vmax;
+    c.vx = lv.t.x * p * vmax;
+    c.vy = lv.t.y * p * vmax;
+    c.still = 0;
+    c.springUsed = false;
+  }
+  const atLever = k => Math.hypot(coin.x - levels[k].rest.x, coin.y - levels[k].rest.y) < LEVER_REACH;
+  function flick(){
+    if (!charging) return;
+    charging = false;
+    chargeSource = null;
+    if (boss && boss.mode === 'cut'){ power = 0; return; }
+    if (state === 'play' && atLever(here)){
+      // 彈簧靴初速加成僅作用於手動發射；自動／trial／預覽路徑不套用，保持物理純淨
+      const isManual = chargeSource === 'pointer' || chargeSource === 'key';
+      const launchPower = isManual ? Math.min(1, power * springLaunchMult()) : power;
+      launch(coin, here, launchPower);
+      run.launchPower = launchPower;
+      run.firstTry = true;
+      run.firstLaunch = true;
+      dashUsedFlight = 0;
+      if (!firstLaunchDone){ firstLaunchDone = true; saveJSON('endlessShinkansen.firstLaunchDone', true); }
+      sfx.launch();
+    }
+    power = 0;
+  }
+
+  function showBanner(text){ banner.text = text; banner.t = 0; }
+
+  // ---- v4 道具（自動模式不使用） ----
+  function magnetRadius(){ return MAGNET_RADIUS + suite.magnetR * SUITE_DEFS[2].per; }
+  function useItem(id){
+    // B6：state play、非覆蓋層、非自動、持有足夠、冷卻與同幀去重守衛
+    if (auto || state !== 'play' || panelOpen()) return;
+    if (!ITEM_DEFS[id] || inv[id] <= 0) return;
+    if (clock - lastItemUse < ITEM_COOLDOWN) return;
+    if (boss && boss.mode === 'cut') return;
+    lastItemUse = clock;
+    if (id === 'shield'){ toastText = '護盾已就緒'; toastT = 0; return; }
+    if (id === 'drill'){
+      const lv = levels[here];
+      if (!lv) return;
+      let best = null, bd = Infinity;
+      for (const rk of lv.rocks){
+        if (!rk.breakable) continue;
+        const d = Math.hypot(coin.x - rk.x, coin.y - rk.y);
+        if (d < bd){ bd = d; best = rk; }
+      }
+      if (!best){ toastText = '附近沒有可鑽岩塊'; toastT = 0; return; }
+      lv.rocks.splice(lv.rocks.indexOf(best), 1);
+      inv.drill--; discover('item', 'drill');
+      spawnParticles(best.x, best.y, SPARK_COUNT, col['coin-hi'], 150, 0.5);
+      sfx.armorBreak();
+    } else if (id === 'magnet'){
+      const R = magnetRadius();
+      let taken = 0;
+      for (let i = Math.max(0, here - 1); i <= Math.min(levels.length - 1, here + 1); i++){
+        for (const g of levels[i].gems){
+          if (!g.taken && Math.hypot(coin.x - g.x, coin.y - g.y) < R){
+            g.taken = true; run.gems++; taken++;
+            spawnParticles(g.x, g.y, SPARK_COUNT, col['crystal'], 130, 0.4);
+          }
+        }
+      }
+      if (taken === 0){ toastText = '半徑內沒有寶石'; toastT = 0; return; }
+      inv.magnet--; discover('item', 'magnet');
+      if (run.gems >= GEM_PER_LEVEL) unlock('gem3');
+      if (run.gems >= 5) unlock('gem5');
+      sfx.gem();
+    }
+    renderHUD();
+  }
+
+  // ---- v4 二段蓄力（僅手動；每次飛行 1 次、每局限 2 次） ----
+  function dashBoost(){
+    // B7：僅手動、play、在空中、非過場；每飛行 1 次、每局 2 次、冷卻 0.2s
+    if (auto || state !== 'play' || panelOpen() || charging) return;
+    if (boss && boss.mode === 'cut') return;
+    const dashFlightMax = DASH_PER_FLIGHT + dashBonus();
+    const dashRunMax = DASH_PER_RUN + dashBonus();
+    if (dashUsedFlight >= dashFlightMax || dashUsedRun >= dashRunMax) return;
+    if (clock - lastDashUse < DASH_COOLDOWN) return;
+    const sp = Math.hypot(coin.vx, coin.vy);
+    if (sp < REST_V) return;
+    const nx = coin.vx / sp, ny = coin.vy / sp;
+    const boost = V_MAX * DASH_MULT * coinTypeDef().vmax;
+    coin.vx += nx * boost; coin.vy += ny * boost;
+    // 補推後夾在速度上限，避免穿透軌道
+    const cap = DASH_SPEED_CAP * coinTypeDef().vmax;
+    const nsp = Math.hypot(coin.vx, coin.vy);
+    if (nsp > cap){ coin.vx *= cap / nsp; coin.vy *= cap / nsp; }
+    dashUsedFlight++; dashUsedRun++; lastDashUse = clock;
+    spawnParticles(coin.x, coin.y, SPARK_COUNT, col['coin-hi'], 140, 0.4);
+    sfx.launch();
+  }
+
+  // ================= 粒子／震動 =================
+  function spawnParticles(x, y, n, color, speed, life){
+    if (!settings.fx) return;
+    for (let i = 0; i < n; i++){
+      if (particles.length >= PARTICLE_MAX) break;
+      const a = rand(0, Math.PI * 2), v = rand(speed * 0.4, speed);
+      particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, t: 0, life: rand(life * 0.6, life), color });
+    }
+  }
+  function updateParticles(dt){
+    for (const p of particles){
+      p.t += dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vy += G * 0.15 * dt;
+      p.x = Math.max(0, Math.min(BOARD_W, p.x));   // 粒子不得溢出棋盤
+    }
+    particles = particles.filter(p => p.t < p.life);
+  }
+  function addShake(mag, dur){
+    if (!settings.fx) return;
+    shake.mag = Math.max(shake.mag, Math.min(SHAKE_MAX, mag));
+    shake.dur = Math.max(shake.dur, Math.min(SHAKE_TIME, dur));
+    shake.t = 0;
+  }
+
+  // ================= Boss 過場 =================
+  function startCutscene(){
+    const lv = levels[here];
+    if (!lv || !lv.arena) return;
+    if (!boss || boss.mode !== 'chase'){
+      boss = { mode: 'chase', type: lv.arena.bossType, seg: lv.arena.seg, progress: 0, level: here, d: COIN_R, roll: 0,
+        dropping: false, dropT: 0, fromY: 0, toY: 0, x: 0, y: 0, t: 0, rams: 0, close: 0 };
+    }
+    boss.mode = 'cut';
+    boss.t = 0;
+    boss.rams = 0;
+    boss.level = here;
+    boss.dropping = false;
+    boss.d = BOARD_W * 0.82;
+    boss.x = lv.side < 0 ? boss.d : BOARD_W - boss.d;
+    boss.y = railY(lv, boss.d) - BOSS_R;
+    boss.sx = boss.x;
+    boss.doorSide = lv.side;
+    boss.doorX = boss.doorSide < 0 ? -WALL + BOSS_R * 0.55 : BOARD_W + WALL - BOSS_R * 0.55;
+    charging = false; chargeSource = null; power = 0; acc = 0;
+    showBanner('BOSS 擊破！');
+    sfx.boss();
+    addShake(SHAKE_MAX * 0.7, SHAKE_TIME * 0.7);
+  }
+
+  function endCutscene(){
+    const cleared = levels[here] && levels[here].arena && levels[here].arena.exit;
+    boss = null;
+    state = 'play';
+    genBudget = GEN_TRIALS_PER_FRAME;
+    genDeadline = performance.now() + GEN_FRAME_MS * 3;  // R1：過場後時間片補段，其餘長跑幀續補
+    ensureLevels(3);
+    const next = Math.min(levels.length - 1, here + 1);
+    here = next;
+    placeAt(here);
+    acc = 0; charging = false; chargeSource = null; power = 0;
+    camY = coin.y - viewH() * COIN_SCREEN_Y;
+    if (cleared){
+      stats.arenas = safeCount(stats.arenas + 1, 0); stats.bosses = safeCount(stats.bosses + 1, 0);
+      if (!arenaPaid.has(here)){
+        arenaPaid.add(here);
+        const clearMult = coinMult() * MOD_DEFS[mod].coin * (dailyMode ? DAILY_COIN_MULT : 1);
+        const clearAmt = Math.max(1, Math.round(COIN_ARENA_CLEAR * clearMult));
+        coins += clearAmt; stats.coinTotal = safeCount(stats.coinTotal + clearAmt, 0);
+        if (stats.coinTotal >= 500) unlock('coin500');
+        if (stats.coinTotal >= 2000) unlock('coin2000');
+        saveJSON(COINS_KEY, coins);
+        coinPulse();
+      }
+      if (!arenaRun.damaged) unlock('arenaClean');
+      unlock('firstBoss');
+      if (stats.bosses >= 10) unlock('boss10');
+      if (dailyMode){
+        const dw = levels[here] ? levels[here].world : 0;
+        if (dw > dailyBest){ dailyBest = dw; saveJSON(DAILY_BEST_KEY, dailyBest); }
+        if (!dailyDone){ dailyDone = true; saveJSON(DAILY_DONE_KEY, '1'); sfx.dailyDone(); }
+        unlock('dailyDone');
+      }
+      saveJSON(STATS_KEY, stats);
+    }
+    const lv = levels[here];
+    if (lv && !lv.arena){
+      if (lv.event === 'treasure') showBanner('寶藏層');
+      else if (lv.event === 'dark') showBanner('幽暗層');
+      else if (lv.event === 'rocks') showBanner('岩陣層');
+      else if (lv.event === 'crystal') showBanner('結晶層');
+      else if (lv.event === 'echo') showBanner('回聲層');
+    }
+  }
+
+  const worldOf = i => levels[i] ? levels[i].world : i + 1;
+  function floorInfo(i){
+    const lv = levels[i];
+    if (!lv) return { main: 'B1', sub: '', segLabel: '' };
+    const main = 'B' + lv.world;
+    const sub = lv.arena ? lv.arena.floorNo + '-' + lv.arena.seg : '';
+    // UI7：HUD 小段指示僅顯示 段/總段，不與主膠囊 B10 並列另一套樓層寫法
+    const segLabel = lv.arena ? lv.arena.seg + '/' + lv.arena.total : '';
+    return { main, sub, segLabel };
+  }
+
+  function showOver(){
+    state = 'over';
+    const wd = worldOf(here);
+    if (wd > best){ best = wd; saveBest(); }
+    if (wd > stats.deepest){ stats.deepest = wd; saveJSON(STATS_KEY, stats); }
+    $('result').textContent = '抵達 ' + floorInfo(here).main;
+    $('best').textContent = '最深紀錄 B' + best + '　' + VERSION_TAG;
+    $('statLine').textContent = '通過 ' + run.segments + ' 段　寶石 ' + run.gems + ' 顆　金幣 ' + coins;
+    $('over').classList.remove('hidden');
+  }
+
+  // ================= 物理 =================
+  function collideRail(c, sg, h, decelMult){
+    const def = coinTypeDef();
+    const ax = sg.a.x, ay = sg.a.y, dx = sg.b.x - ax, dy = sg.b.y - ay;
+    let u = ((c.x - ax) * dx + (c.y - ay) * dy) / (dx * dx + dy * dy);
+    const corner = u <= 0 || u >= 1;
+    u = Math.max(0, Math.min(1, u));
+    const qx = ax + u * dx, qy = ay + u * dy;
+    const ex = c.x - qx, ey = c.y - qy, d = Math.hypot(ex, ey);
+    if (d >= COIN_R || d < 1e-6) return;
+    c.onRail = true;
+    const nx = ex / d, ny = ey / d;
+    c.x = qx + nx * COIN_R; c.y = qy + ny * COIN_R;
+    const vn = c.vx * nx + c.vy * ny;
+    if (vn < 0){
+      const e = !corner && -vn > def.bounceMin ? def.bounce : 0;
+      c.vx -= (1 + e) * vn * nx; c.vy -= (1 + e) * vn * ny;
+    }
+    const tx = -ny, ty = nx;
+    const vt = c.vx * tx + c.vy * ty, vn2 = c.vx * nx + c.vy * ny;
+    const dec = def.decel * (decelMult || 1);
+    const nvt = Math.sign(vt) * Math.max(0, Math.abs(vt) - dec * h);
+    c.vx = nvt * tx + vn2 * nx; c.vy = nvt * ty + vn2 * ny;
+  }
+
+  function collideRock(c, rk, h){
+    const def = coinTypeDef();
+    const dx = c.x - rk.x, dy = c.y - rk.y, d = Math.hypot(dx, dy), m = COIN_R + rk.r;
+    if (d >= m || d < 1e-6) return;
+    const nx = dx / d, ny = dy / d;
+    c.x = rk.x + nx * m; c.y = rk.y + ny * m;
+    const vn = c.vx * nx + c.vy * ny;
+    if (vn < 0){
+      if (rk.breakable && def.heavy){ rk.hp -= 1; if (rk.hp <= 0) rk.dead = true; return; }
+      if (def.heavy){
+        // 重型撞一般輕岩：吸收法向衝量，貼著滑過，不反射脫軌
+        c.vx -= vn * nx; c.vy -= vn * ny;
+        return;
+      }
+      const rb = ROCK_BOUNCE * def.rockDeflect;
+      c.vx -= (1 + rb) * vn * nx; c.vy -= (1 + rb) * vn * ny;
+    }
+  }
+
+  function segUnder(c, lv){
+    let best = null, bd = Infinity;
+    for (const sg of lv.segs){
+      const ax = sg.a.x, ay = sg.a.y, dx = sg.b.x - ax, dy = sg.b.y - ay;
+      const u = Math.max(0, Math.min(1, ((c.x - ax) * dx + (c.y - ay) * dy) / (dx * dx + dy * dy)));
+      const qx = ax + u * dx, qy = ay + u * dy;
+      const d = Math.hypot(c.x - qx, c.y - qy);
+      if (d < bd){ bd = d; best = sg; }
+    }
+    return best;
+  }
+
+  function simStep(c, k, h, real){
+    c.onRail = false;
+    c.vy += G * h;
+    c.x += c.vx * h; c.y += c.vy * h;
+    if (c.x < COIN_R){ c.x = COIN_R; if (c.vx < 0) c.vx = -c.vx * WALL_BOUNCE; }
+    if (c.x > BOARD_W - COIN_R){ c.x = BOARD_W - COIN_R; if (c.vx > 0) c.vx = -c.vx * WALL_BOUNCE; }
+    const from = Math.max(0, k - 1), to = Math.min(levels.length - 1, k + 2);
+    for (let i = from; i <= to; i++){
+      const lv = levels[i];
+      for (const sg of lv.segs) collideRail(c, sg, h, lv.decelMult);
+      for (const rk of lv.rocks) collideRock(c, rk, h);
+      if (lv.rocks.some(r => r.dead)) lv.rocks = lv.rocks.filter(r => !r.dead);
+      // 彈簧台：著地一次性額外加速
+      if (lv.spring && !c.springUsed){
+        const d = lv.side < 0 ? c.x : BOARD_W - c.x;
+        if (d >= lv.spring.d0 && d <= lv.spring.d1){
+          const sg = segUnder(c, lv);
+          if (sg){
+            const dx = sg.b.x - sg.a.x, dy = sg.b.y - sg.a.y, l = Math.hypot(dx, dy) || 1;
+            const dir = c.vx >= 0 ? 1 : -1;
+            c.vx += dx / l * lv.spring.boost * dir;
+            c.vy += dy / l * lv.spring.boost * dir;
+            c.springUsed = true;
+            if (real) spawnParticles(c.x, c.y, DUST_COUNT, col.coin, 120, 0.4);
+          }
+        }
+      }
+      // v4 風場：沿軌道方向推力（trial 同步套用）
+      if (lv.mech && lv.mech.type === 'wind'){
+        const wd = lv.side < 0 ? c.x : BOARD_W - c.x;
+        if (wd >= lv.mech.d0 && wd <= lv.mech.d1) c.vx += MECH_WIND_FORCE * lv.mech.dir * h;
+      }
+      // v4 緩衝墊：每層一次接住墜落金貨並彈回（trial 同步）
+      if (lv.mech && lv.mech.type === 'pad' && !lv.mech.used && c.vy > 0){
+        const pd = lv.side < 0 ? c.x : BOARD_W - c.x;
+        if (pd >= lv.mech.d0 && pd <= lv.mech.d1){
+          const ry = railY(lv, pd);
+          if (c.y > ry + COIN_R + 6){
+            c.y = ry + COIN_R + 6;
+            c.vy = -Math.abs(c.vy) * MECH_PAD_BOUNCE;
+            lv.mech.used = true;
+            if (real) spawnParticles(c.x, c.y, DUST_COUNT, col.coin, 120, 0.4);
+          }
+        }
+      }
+      // v4 移動平台：週期往返，平台帶動其上金貨（trial 同步；僅手動生成）
+      if (lv.mech && lv.mech.type === 'mover'){
+        const m = lv.mech; m.t += h;
+        const mid = (m.d0 + m.d1) / 2;
+        const off = MECH_MOVER_AMP * Math.sin(2 * Math.PI * m.t / MECH_MOVER_PERIOD + m.phase);
+        const pd = Math.max(m.d0, Math.min(m.d1, mid + off));
+        const px = lv.side < 0 ? pd : BOARD_W - pd;
+        const py = railY(lv, pd);
+        const prevOff = MECH_MOVER_AMP * Math.sin(2 * Math.PI * (m.t - h) / MECH_MOVER_PERIOD + m.phase);
+        const prevPd = Math.max(m.d0, Math.min(m.d1, mid + prevOff));
+        const prevPx = lv.side < 0 ? prevPd : BOARD_W - prevPd;
+        if (Math.abs(c.y - (py - COIN_R)) < COIN_R + 3 && Math.abs(c.x - px) < MECH_MOVER_HALF + COIN_R){
+          c.x += px - prevPx;
+        }
+      }
+      // v4 傳送門：成對傳送，保留水平速度，冷卻避免來回彈跳（trial 同步；僅手動生成）
+      if (lv.mech && lv.mech.type === 'portal'){
+        const m = lv.mech; m.t += h; if (m.cd > 0) m.cd -= h;
+        const pa = { x: lv.side < 0 ? m.a : BOARD_W - m.a, y: railY(lv, m.a) - COIN_R - 2 };
+        const pb = { x: lv.side < 0 ? m.b : BOARD_W - m.b, y: railY(lv, m.b) - COIN_R - 2 };
+        if (m.cd <= 0){
+          if (Math.hypot(c.x - pa.x, c.y - pa.y) < MECH_PORTAL_R + COIN_R){
+            c.x = pb.x; c.y = pb.y; c.vy *= 0.4; m.cd = MECH_PORTAL_FADE;
+          } else if (Math.hypot(c.x - pb.x, c.y - pb.y) < MECH_PORTAL_R + COIN_R){
+            c.x = pa.x; c.y = pa.y; c.vy *= 0.4; m.cd = MECH_PORTAL_FADE;
+          }
+        }
+      }
+      // v4 旋槓：週期掃過，端點圓碰撞（trial 同步；僅手動生成）
+      if (lv.mech && lv.mech.type === 'rotor'){
+        const m = lv.mech; m.t += h;
+        const pivot = { x: lv.side < 0 ? m.d : BOARD_W - m.d, y: railY(lv, m.d) - 10 };
+        const ang = 2 * Math.PI * m.t / MECH_ROTOR_PERIOD + m.phase;
+        const ex = pivot.x + MECH_ROTOR_ARM * Math.cos(ang);
+        const ey = pivot.y + MECH_ROTOR_ARM * Math.sin(ang);
+        const dx = c.x - ex, dy = c.y - ey, d = Math.hypot(dx, dy), rr = MECH_ROTOR_R + COIN_R;
+        if (d < rr && d > 1e-6){
+          const nx = dx / d, ny = dy / d;
+          c.x = ex + nx * rr; c.y = ey + ny * rr;
+          const vn = c.vx * nx + c.vy * ny;
+          if (vn < 0){ const rb = ROCK_BOUNCE * 0.5; c.vx -= (1 + rb) * vn * nx; c.vy -= (1 + rb) * vn * ny; }
+        }
+      }
+      // 寶石拾取（僅實機）
+      if (real) for (const g of lv.gems){
+        if (!g.taken && Math.hypot(c.x - g.x, c.y - g.y) < COIN_R + 5){
+          g.taken = true;
+          run.gems++;
+          sfx.gem();
+          spawnParticles(g.x, g.y, SPARK_COUNT, col['coin-hi'], 140, 0.5);
+          if (run.gems >= GEM_PER_LEVEL) unlock('gem3');
+          if (run.gems >= 5) unlock('gem5');
+        }
+      }
+    }
+    const sp = Math.hypot(c.vx, c.vy);
+    for (let i = from; i <= to; i++){
+      for (const ho of levels[i].holes){
+        if (ho.trap){
+          if (c.x > ho.x0 && c.x < ho.x1 && c.y > ho.yTop + 2 && c.y < ho.yTop + TRAP_DEPTH) return { hole: ho, level: i };
+          continue;
+        }
+        const inside = ho.wall
+          ? Math.abs(c.x - ho.x) < ho.r && c.y > ho.y - ho.r - WALL_HOLE_REACH && c.y < ho.y + ho.r - 2
+          : Math.hypot(c.x - ho.x, c.y - ho.y) < ho.r - COIN_R + HOLE_FIT;
+        if (inside && Math.abs(c.vx) < HOLE_PASS_V) return { hole: ho, level: i };
+      }
+    }
+    c.still = sp < REST_V ? c.still + h : 0;
+    if (c.still > REST_TIME){
+      for (let i = from; i <= to; i++){
+        const r = levels[i].rest;
+        if (Math.hypot(c.x - r.x, c.y - r.y) < REST_DIST) return { rest: i };
+      }
+      if (sp < STUCK_V){ c.stop = (c.stop || 0) + h; if (c.stop > STUCK_TIME) return { stuck: true }; }
+      else c.stop = 0;
+    }
+    return null;
+  }
+
+  let trialLandHole = null;
+  let trialLandMin = Infinity, trialLandMax = -Infinity;
+  function touching(c, lv){
+    for (const sg of lv.segs){
+      const ax = sg.a.x, ay = sg.a.y, dx = sg.b.x - ax, dy = sg.b.y - ay;
+      const u = Math.max(0, Math.min(1, ((c.x - ax) * dx + (c.y - ay) * dy) / (dx * dx + dy * dy)));
+      if (Math.hypot(c.x - ax - u * dx, c.y - ay - u * dy) < COIN_R + 1) return true;
+    }
+    return false;
+  }
+  function trial(k, p){
+    const r = levels[k].rest;
+    const c = { x: r.x, y: r.y, vx: 0, vy: 0, still: 0, springUsed: false };
+    launch(c, k, p);
+    const n = Math.round(SIM_TIME / STEP);
+    const floor = levels[Math.min(levels.length - 1, k + 2)].a.y + 100;
+    const lower = levels[k + 1];
+    trialLandMin = Infinity; trialLandMax = -Infinity;
+    let landed = false;
+    for (let i = 0; i < n && c.y < floor; i++){
+      const e = simStep(c, k, STEP, false);
+      if (!landed && lower && c.y > lower.topY - COIN_R * 2 && touching(c, lower)) landed = true;
+      if (landed){ trialLandMin = Math.min(trialLandMin, c.x); trialLandMax = Math.max(trialLandMax, c.x); }
+      if (!e) continue;
+      if (e.hole){
+        if (e.level > k){ trialLandHole = e.hole; return 'landhole'; }
+        return 'hole';
+      }
+      if (e.stuck) return 'stuck';
+      return e.rest > k ? 'next' : e.rest === k ? 'retry' : 'lost';
+    }
+    return 'lost';
+  }
+
+  function railY(lv, d){
+    if (!lv || !lv.segs.length) return 0;
+    const x = lv.side < 0 ? d : BOARD_W - d;
+    for (const sg of lv.segs){
+      const x0 = Math.min(sg.a.x, sg.b.x), x1 = Math.max(sg.a.x, sg.b.x);
+      if (x >= x0 - 0.5 && x <= x1 + 0.5 && Math.abs(sg.b.x - sg.a.x) > 1e-6){
+        const u = (x - sg.a.x) / (sg.b.x - sg.a.x);
+        return sg.a.y + (sg.b.y - sg.a.y) * u;
+      }
+    }
+    return lv.segs[0].a.y;
+  }
+
+  // ================= 金幣發放（僅 here 真前進且本段未發過） =================
+  // 取整順序：先算基礎值（一般層含深度係數／事件加成；競技場段固定 8，不套深度）→
+  // 乘金幣加成 → Math.round → 至少 1；競技場整場 50 同口徑（不套深度係數）
+  function awardCoins(lv){
+    let amount;
+    if (lv.arena){
+      amount = COIN_ARENA_SEG;
+    } else {
+      const depth = Math.min(COIN_DEPTH_CAP, 1 + lv.world * COIN_DEPTH_RATE);
+      amount = COIN_BASE * depth;
+      const ev = COIN_EVENT_BONUS[lv.event];
+      if (ev) amount += ev;
+    }
+    const mult = coinMult() * MOD_DEFS[mod].coin * (dailyMode ? DAILY_COIN_MULT : 1);
+    amount = Math.max(1, Math.round(amount * mult));
+    coins = Math.min(1e9, coins + amount);
+    stats.coinTotal = safeCount(stats.coinTotal + amount, 0);
+    if (stats.coinTotal >= 500) unlock('coin500');
+    if (stats.coinTotal >= 2000) unlock('coin2000');
+    saveJSON(COINS_KEY, coins);
+    coinPulse();
+  }
+  function coinPulse(){
+    coinJumpT = COIN_JUMP_TIME;
+    if (coin && state === 'play'){
+      spawnParticles(coin.x, coin.y - COIN_R, Math.min(COIN_PARTICLE_MAX, 6), col.coin, 90, 0.45);
+    }
+  }
+
+  // ================= 到達新段事件 =================
+  // ---- v4 每日三任務進度（與每日挑戰分開記錄，跨日重置） ----
+  function updateTaskProgress(lv){
+    if (!dailyTasks) return;
+    for (const t of dailyTasks.list){
+      const def = TASK_DEFS.find(x => x.id === t.id);
+      if (!def) continue;
+      let p = t.prog;
+      switch (t.id){
+        case 'streak8': p = Math.max(p, Math.min(def.target, run.streak)); break;
+        case 'deep30': p = Math.max(p, Math.min(def.target, lv.world)); break;
+        case 'coin500': p = Math.min(def.target, stats.coinTotal); break;
+        case 'rush2': p = Math.max(p, Math.min(def.target, rushStreak)); break;
+        case 'cleanArena': if (lv.arena && lv.arena.exit && !arenaRun.damaged) p = def.target; break;
+      }
+      t.prog = p;
+      if (p >= def.target) t.done = true;
+    }
+    saveJSON(DAILY_TASK_KEY, dailyTasks);
+  }
+
+  // v4 遺跡房岔路：加權隨機道具（福袋同口徑）
+  function rollRelicItem(){
+    const keys = Object.keys(BAG_WEIGHT);
+    let acc = 0, r = rngFn() * keys.reduce((s, k) => s + BAG_WEIGHT[k], 0), pick = keys[0];
+    for (const k of keys){ acc += BAG_WEIGHT[k]; if (r < acc){ pick = k; break; } }
+    return pick;
+  }
+  function chooseRelic(side){
+    const lv = levels[here];
+    if (!lv || !lv.relic || lv.relic.branch) return;
+    lv.relic.branch = side;
+    lv.relic.closed = side === 'left' ? 'right' : 'left';
+    lv.relic.pending = false;
+    if (side === 'left'){
+      if (mod !== 'rich'){
+        for (let i = 0; i < RELIC_GEMS; i++){
+          const d = BOARD_W * (0.2 + 0.6 * (i / Math.max(1, RELIC_GEMS - 1)));
+          const gx = lv.side < 0 ? d : BOARD_W - d;
+          lv.gems.push({ d, x: gx, y: railY(lv, d) - COIN_R - 4, taken: false });
+        }
+      }
+      showBanner('遺跡房：寶石區');
+    } else {
+      coins += RELIC_COINS; stats.coinTotal = safeCount(stats.coinTotal + RELIC_COINS, 0); saveJSON(COINS_KEY, coins);
+      if (inv[lv.relic.item] < ITEM_DEFS[lv.relic.item].max) inv[lv.relic.item]++;
+      showBanner('遺跡房：金幣＋道具');
+    }
+  }
+
+  function onArriveSegment(){
+    const lv = levels[here];
+    run.segments++;
+    stats.segments = safeCount(stats.segments + 1, 0);
+    if (clock - lastClearSfx >= CLEAR_SFX_GAP){ sfx.clear(); lastClearSfx = clock; }
+    lastPowers.push(run.launchPower);
+    if (lastPowers.length > 20) lastPowers.shift();
+    saveJSON(STATS_KEY, stats);
+    discover('terrain', lv.featureType);
+    discover('event', lv.event);
+    if (lv.mech) discover('mech', lv.mech.type);
+
+    // N6 寶石轉金幣：本段未拾取寶石每顆折算固定金幣
+    if (lv.gems && lv.gems.length){
+      const left = lv.gems.filter(g => !g.taken).length;
+      const val = gemCoinValue();
+      if (left > 0 && val > 0){
+        const c = left * val;
+        coins += c; stats.coinTotal = safeCount(stats.coinTotal + c, 0); saveJSON(COINS_KEY, coins);
+      }
+    }
+
+    if (!runPaid.has(here)){ runPaid.add(here); awardCoins(lv); }
+
+    // v4 遺跡房岔路：到岔點選擇；自動預設走左（寶石），手動點左右或 ←/→ 選擇後封閉另一側
+    if (lv.relic){
+      discover('relic', 'room');
+      if (!lv.relic.branch){
+        if (auto) chooseRelic('left');
+        else { lv.relic.pending = true; showBanner('遺跡房：點擊左／右選擇寶石或金幣道具'); }
+      }
+    }
+
+    if (lv.arena){
+      discover('boss', lv.arena.bossType);
+      if (!boss || boss.mode !== 'chase'){
+        boss = { mode: 'chase', type: lv.arena.bossType, seg: lv.arena.seg, progress: 0, level: Math.max(0, here - 1),
+          d: COIN_R, roll: 0, dropping: false, dropT: 0, fromY: 0, toY: 0, x: 0, y: 0, t: 0, rams: 0, close: 0,
+          armor: lv.arena.bossType === 'armor' ? ARMOR_COUNT : 0, speedMult: 1, furyT: 0 };
+      }
+      boss.type = lv.arena.bossType;
+      boss.seg = lv.arena.seg;
+      boss.progress = 0;
+      if (lv.arena.seg === 1){ run.arenaDeath = false; arenaRun.damaged = false; showBanner('BOSS 戰！'); }
+      if (lv.arena.exit) startCutscene();
+    } else {
+      boss = null;
+      if (lv.event === 'treasure') showBanner('寶藏層');
+      else if (lv.event === 'dark') showBanner('幽暗層');
+      else if (lv.event === 'rocks') showBanner('岩陣層');
+      else if (lv.event === 'crystal') showBanner('結晶層');
+      else if (lv.event === 'echo') showBanner('回聲層');
+    }
+
+    // 成就判定
+    const wd = lv.world;
+    if (wd > stats.deepest){ stats.deepest = wd; saveJSON(STATS_KEY, stats); }
+    // v4 排行榜：最深／最速 B20／Rush 連勝
+    if (wd > leader.deepest){ leader.deepest = wd; saveLeader(); }
+    if (wd >= 20 && (leader.fastestB20 === 0 || b20Time < leader.fastestB20)){ leader.fastestB20 = +b20Time.toFixed(1); saveLeader(); }
+    if (gameMode === 'sprint') sprintClock += (lv.arena && lv.arena.exit) ? SPRINT_ARENA_BONUS : SPRINT_SEG_BONUS;
+    if (lv.arena && lv.arena.exit && gameMode === 'rush'){
+      rushStreak++; rushWonThisRun++;
+      if (rushStreak > leader.rushWins){ leader.rushWins = rushStreak; saveLeader(); }
+      if (rushStreak > rushBest){ rushBest = rushStreak; saveJSON(RUSH_KEY, rushBest); }
+    }
+    updateTaskProgress(lv);
+    if (wd >= 15) unlock('b15');
+    if (wd >= 30) unlock('b30');
+    if (run.firstTry){
+      run.streak++;
+      if (run.streak >= 5) unlock('streak5');
+      if (run.launchPower < 0.7) unlock('power70');
+    } else run.streak = 0;
+    if (lv.selfMin != null && lv.selfMax > lv.selfMin){
+      const bandLo = lv.selfMin / 100 + 0.3 * (lv.selfMax - lv.selfMin) / 100;
+      const bandHi = lv.selfMax / 100 - 0.3 * (lv.selfMax - lv.selfMin) / 100;
+      if (run.launchPower >= bandLo && run.launchPower <= bandHi){
+        run.bandStreak++;
+        if (run.bandStreak >= 3) unlock('band3');
+      } else run.bandStreak = 0;
+    } else run.bandStreak = 0;
+    if (lv.event === 'echo') unlock('echo');
+    if (stats.segments >= 50) unlock('seg50');
+    if (stats.segments >= 100) unlock('seg100');
+    if (wd >= 40) unlock('b40');
+    if (MOD_KEYS.filter(k => k !== 'calm').every(k => codex.has('modifier:' + k))) unlock('modAll');
+  }
+
+  function gemBonus(){ return Math.min(gemCapVal(), run.gems * GEM_BONUS_PER); }
+
+  // ================= 主迴圈 =================
+  // 任一覆蓋層（選單／圖鑑／統計／成就／說明／教學）開啟時暫停遊戲
+  function panelOpen(){
+    return !$('overlay').classList.contains('hidden') || !$('tutorial').classList.contains('hidden');
+  }
+
+  function update(dt){
+    const paused = panelOpen();
+    if (charging && !paused) power = Math.min(1, power + dt / CHARGE_TIME * (1 + gemBonus()));
+    if (state !== 'over' && !paused) banner.t += dt;
+    if (!paused){
+      updateParticles(dt);
+      if (shake.t < shake.dur) shake.t += dt; else { shake.mag = 0; shake.dur = 0; shake.t = 0; }
+    }
+    if (!paused){
+      if (toastT < 2) toastT += dt;
+      if (coinJumpT > 0) coinJumpT -= dt;
+      if (shopLockT > 0) shopLockT -= dt;
+    }
+
+    if (!paused){
+      const cutting = boss && boss.mode === 'cut';
+      if (state === 'play' && !cutting){
+        const prevHere = here;
+        acc += dt * PLAY_SPEED;
+        while (acc >= STEP && state === 'play' && !(boss && boss.mode === 'cut')){
+          acc -= STEP;
+          const wasOnRail = !!coin.onRail;
+          const e = simStep(coin, here, STEP, true);
+          if (coin.onRail && !wasOnRail && clock - lastLandSfx >= LAND_SFX_GAP){
+            sfx.land(); addShake(LAND_SHAKE_MAG, LAND_SHAKE_TIME); lastLandSfx = clock;
+          }
+          if (e && e.hole){
+            if (levels[here] && levels[here].arena) arenaRun.damaged = true;
+            const guardLv = upg('guard');
+            const guarded = guardLv > 0 && run.segments < guardSegLimit() && run.guardUses < guardUseLimit();
+            if (shieldCount > 0){
+              // v4 護盾道具：擋一次落穴，回該段槓桿前
+              shieldCount--; inv.shield = shieldCount;
+              placeAt(here);
+              charging = false; chargeSource = null; power = 0; acc = 0;
+              spawnParticles(coin.x, coin.y, SPARK_COUNT, col['coin-hi'], 140, 0.5);
+              sfx.armorBreak(); toastText = '護盾抵擋落穴'; toastT = 0;
+            } else if (guarded){
+              // N6 起始保護：回該段槓桿前，不判死
+              run.guardUses++;
+              placeAt(here);
+              charging = false; chargeSource = null; power = 0; acc = 0;
+              spawnParticles(coin.x, coin.y, DUST_COUNT, col['coin-hi'], 120, 0.4);
+              sfx.ui();
+            } else {
+              state = 'fall'; fallT = 0; fallHole = e.hole; fallFrom = { x: coin.x, y: coin.y };
+              charging = false; chargeSource = null; power = 0;
+              run.arenaDeath = !!(levels[here] && levels[here].arena);
+              sfx.hole(); addShake(SHAKE_MAX * 0.6, SHAKE_TIME * 0.6);
+            }
+          }
+          for (let k = here + 1; k <= Math.min(levels.length - 1, here + 2); k++){
+            if (atLever(k)){ here = k; break; }
+          }
+        }
+        if (here !== prevHere) onArriveSegment();
+
+        if (boss && boss.mode === 'chase'){
+          let segTime = SEG_TIME + bossSlowBonus() + (boss.type === 'eye' ? EYE_SEG_TIME_BONUS : 0);
+          if (mod === 'swift') segTime -= MOD_SWIFT_SEG_PENALTY;
+          segTime = Math.max(4, segTime);
+          if (boss.furyT > 0) boss.furyT -= dt;
+          else boss.progress = Math.min(1, boss.progress + dt / segTime);
+          const maxLv = levels.length - 1;
+          boss.level = Math.max(0, here - 1);
+          const blv = levels[boss.level];
+          const tLeft = Math.max(0.2, segTime * (1 - boss.progress));
+          const gapD = blv.gapPos;
+          const speed = Math.max(6, Math.min(150, gapD / tLeft)) * boss.speedMult;
+          if (!boss.dropping){
+            const dir = gapD > boss.d ? 1 : -1;
+            boss.d = Math.max(0, Math.min(BOARD_W, boss.d + dir * speed * dt));
+            boss.roll += dir * speed * dt / BOSS_R;
+            if (boss.progress > 0.8 && Math.abs(boss.d - gapD) < BOSS_R){
+              boss.dropping = true; boss.dropT = 0;
+              boss.fromY = railY(blv, boss.d);
+              const nl = levels[Math.min(maxLv, here)];
+              boss.toY = railY(nl, nl.gapPos);
+            }
+          } else {
+            boss.dropT += dt;
+            if (boss.dropT >= BOSS_DROP_TIME){
+              boss.dropping = false;
+              boss.level = Math.min(maxLv, here);
+              boss.d = levels[boss.level].gapPos;
+            }
+          }
+          const lv = levels[boss.level];
+          const ry = boss.dropping
+            ? boss.fromY + (boss.toY - boss.fromY) * Math.min(1, boss.dropT / BOSS_DROP_TIME)
+            : railY(lv, boss.d);
+          boss.x = lv.side < 0 ? boss.d : BOARD_W - boss.d;
+          boss.y = ry - BOSS_R;
+          boss.close = Math.max(0, Math.min(1, 1 - Math.hypot(boss.x - coin.x, boss.y - coin.y) / (BOARD_W * 1.6)));
+          if (boss.progress >= 1){
+            if (levels[here] && levels[here].arena) arenaRun.damaged = true;
+            if (boss.type === 'armor' && boss.armor > 0){
+              // N1 護甲免死：碎一片、進度重置、速度累積；三片全碎進入狂暴
+              arenaRun.damaged = true;
+              boss.armor--;
+              boss.progress = ARMOR_RESET_PROGRESS;
+              boss.speedMult *= ARMOR_SPEED_HIT;
+              if (boss.armor === 0){ boss.speedMult = ARMOR_SPEED_FURY; boss.furyT = ARMOR_FURY_TIME; showBanner('護甲碎裂！'); sfx.armorFury(); }
+              spawnParticles(boss.x, boss.y, ARMOR_DEBRIS, ARMOR_RING_COLOR, 170, 0.6);
+              sfx.armorBreak(); addShake(SHAKE_MAX * 0.5, SHAKE_TIME * 0.5);
+            } else if (shieldCount > 0){
+              // v4 護盾道具：擋一次追擊，Boss 進度重置
+              shieldCount--; inv.shield = shieldCount;
+              boss.progress = ARMOR_RESET_PROGRESS;
+              spawnParticles(boss.x, boss.y, ARMOR_DEBRIS, ARMOR_RING_COLOR, 170, 0.6);
+              sfx.armorBreak(); toastText = '護盾抵擋追擊'; toastT = 0;
+            } else {
+              boss.x = coin.x; boss.y = coin.y;
+              boss.close = 1;
+              state = 'fall'; fallT = 0;
+              fallHole = { x: coin.x, y: coin.y, r: COIN_R };
+              fallFrom = { x: coin.x, y: coin.y };
+              charging = false; chargeSource = null; power = 0;
+              run.arenaDeath = !!(levels[here] && levels[here].arena);
+              spawnParticles(coin.x, coin.y, LUNGE_COUNT, col.rock2, 160, 0.5);
+              sfx.chased(); addShake(SHAKE_MAX, SHAKE_TIME);
+            }
+          }
+        }
+      }
+
+      if (boss && boss.mode === 'cut'){
+        boss.t += dt;
+        boss.rams = boss.t >= 1.15 ? 2 : boss.t >= 0.55 ? 1 : 0;
+        if (boss.t >= cutFastTime()) endCutscene();
+      }
+
+      clock += dt;
+      // v4 限時衝刺：倒數歸零結算
+      if (gameMode === 'sprint' && state === 'play'){
+        sprintClock -= dt;
+        if (sprintClock <= 0){
+          sprintClock = 0;
+          state = 'fall'; fallT = 0;
+          fallHole = { x: coin.x, y: coin.y, r: COIN_R }; fallFrom = { x: coin.x, y: coin.y };
+          charging = false; chargeSource = null; power = 0;
+        }
+      }
+      if (gameMode !== 'sprint' && state === 'play') b20Time += dt;
+      if (state === 'play' && Math.hypot(coin.vx, coin.vy) >= TRAIL_V) trail.push({ x: coin.x, y: coin.y, t: clock });
+      while (trail.length > TRAIL_MAX) trail.shift();
+      if (state !== 'play') trail = [];
+      while (trail.length && clock - trail[0].t > TRAIL_TIME) trail.shift();
+
+      if (state === 'fall'){
+        fallT += dt;
+        if (fallT >= FALL_TIME) showOver();
+      }
+      if (state !== 'fall' && state !== 'over'){
+        const target = coin.y - viewH() * COIN_SCREEN_Y;
+        camY += (target - camY) * Math.min(1, dt * CAM_EASE);
+      }
+      autoUpdate(dt);
+    }
+    renderHUD();
+  }
+
+  // ================= HUD =================
+  let lastShownCoins = -1;
+  function renderHUD(){
+    const f = floorInfo(here);
+    $('floorMain').textContent = f.main;
+    $('floorSub').textContent = f.segLabel;
+    const coinCap = $('coinCapsule');
+    if (lastShownCoins !== coins){
+      lastShownCoins = coins;
+      $('coinVal').textContent = coins;
+      coinCap.classList.remove('jump');
+      void coinCap.offsetWidth;
+      coinCap.classList.add('jump');
+    }
+    const dots = $('gemDots');
+    dots.innerHTML = '';
+    const gemN = Math.min(GEM_PER_LEVEL, run.gems);
+    for (let i = 0; i < gemN; i++){
+      const el = document.createElement('i');
+      el.classList.add('on');
+      dots.appendChild(el);
+    }
+    const mb = $('modBar');
+    if (mod !== 'calm'){ mb.classList.remove('hidden'); mb.style.background = MOD_DEFS[mod].dot; }
+    else mb.classList.add('hidden');
+    const bar = $('bossBar');
+    const armorDots = $('armorDots');
+    if (boss && boss.mode === 'chase'){
+      bar.classList.add('on');
+      bar.classList.toggle('eye', boss.type === 'eye');
+      const fill = $('bossBarFill');
+      fill.style.width = (boss.progress * 100).toFixed(1) + '%';
+      fill.classList.toggle('hot', boss.type !== 'eye' && boss.progress > 0.66);
+      if (boss.type === 'armor'){
+        armorDots.classList.remove('hidden');
+        armorDots.innerHTML = '';
+        for (let i = 0; i < ARMOR_COUNT; i++){
+          const el = document.createElement('i');
+          if (i >= boss.armor) el.classList.add('off');
+          armorDots.appendChild(el);
+        }
+      } else armorDots.classList.add('hidden');
+    } else { bar.classList.remove('on'); armorDots.classList.add('hidden'); }
+    // v4 道具第二排：持有 >0 才出現，全 0 隱藏
+    const ib = $('itemBar');
+    const anyItem = inv.shield > 0 || inv.drill > 0 || inv.magnet > 0;
+    ib.classList.toggle('hidden', !anyItem);
+    if (anyItem){
+      ib.innerHTML = '';
+      const labels = { shield: ['盾', '1'], drill: ['鑽', '2'], magnet: ['磁', '3'] };
+      for (const id of ['shield', 'drill', 'magnet']){
+        if (inv[id] <= 0) continue;
+        const chip = document.createElement('div');
+        chip.className = 'itemChip';
+        chip.dataset.item = id;
+        chip.innerHTML = `<span class="ic">${labels[id][0]}</span><span class="n">${inv[id]}</span>`;
+        chip.addEventListener('pointerdown', e => e.stopPropagation());
+        chip.addEventListener('click', () => useItem(id));
+        ib.appendChild(chip);
+      }
+    }
+  }
+
+  // M1 軌跡預覽：Lv0 完全不顯示；Lv≥1 且設定開關開才顯示
+  function computePreview(){
+    if (!charging || auto || !settings.preview || !previewUnlocked() || state !== 'play') return [];
+    const r = levels[here].rest;
+    const c = { x: r.x, y: r.y, vx: 0, vy: 0, still: 0, springUsed: false };
+    launch(c, here, power);
+    const pts = [];
+    const ptsN = previewPointCount();
+    const stepN = Math.max(1, Math.round(PREVIEW_TIME / STEP / ptsN));
+    let n = 0;
+    const total = Math.round(PREVIEW_TIME / STEP);
+    for (let i = 0; i < total; i++){
+      const e = simStep(c, here, STEP, false);
+      if (i % stepN === 0) pts.push({ x: c.x, y: c.y });
+      if (e && (e.hole || e.rest != null || e.stuck)) break;
+      n++;
+    }
+    return pts.slice(0, ptsN);
+  }
+
+  // ================= 描画 =================
+  const viewH = () => H / SC;
+
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    SC = W / (BOARD_W + (WALL + LEVER_AREA) * 2);
+    if (coin) camY = coin.y - viewH() * COIN_SCREEN_Y;   // 重算縮放後重新錨定相機
+    if (sideFrame) buildSideFrame();                    // B11：旋轉／縮放後重建框景，不留舊 buffer
+  }
+
+  // V4 寬螢幕兩側岩壁框景：離屏預渲染一次，不進物理／相機
+  let sideFrame = null;
+  function buildSideFrame(){
+    const fw = 1280, fh = 800;
+    sideFrame = document.createElement('canvas');
+    sideFrame.width = fw; sideFrame.height = fh;
+    const s = sideFrame.getContext('2d');
+    const g = s.createLinearGradient(0, 0, 0, fh);
+    g.addColorStop(0, col.rock4); g.addColorStop(0.5, col.rock3); g.addColorStop(1, col.rock4);
+    s.fillStyle = g; s.fillRect(0, 0, fw, fh);
+    // 極低對比淡斑：alpha 與尺寸再降一半，讀成背景而非第二個場景
+    for (let i = 0; i < 120; i++){
+      const x = hash(i, 3, 1) * fw, y = hash(i, 5, 2) * fh, r = 3 + hash(i, 7, 3) * 9;
+      s.fillStyle = 'rgba(0,0,0,' + (0.025 + hash(i, 9, 4) * 0.03) + ')';
+      s.beginPath(); s.arc(x, y, r, 0, Math.PI * 2); s.fill();
+    }
+    // 由外向內暗角（vignette），中央板帶區域維持透明
+    const L = (fw - 420) / 2, R = (fw + 420) / 2;
+    const vg = s.createLinearGradient(0, 0, fw, 0);
+    vg.addColorStop(0, 'rgba(0,0,0,.5)');
+    vg.addColorStop(L / fw, 'rgba(0,0,0,0)');
+    vg.addColorStop(R / fw, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,.5)');
+    s.fillStyle = vg; s.fillRect(0, 0, fw, fh);
+    // 遊戲欄位左右 1px 極淡邊線＋輕微內陰影
+    s.fillStyle = 'rgba(0,0,0,.5)';
+    s.fillRect(L - 1, 0, 1, fh);
+    s.fillRect(R, 0, 1, fh);
+    s.fillStyle = 'rgba(255,240,205,.06)';
+    s.fillRect(L, 0, 1, fh);
+    s.fillRect(R + 1, 0, 1, fh);
+    document.body.style.backgroundImage = 'url(' + sideFrame.toDataURL() + ')';
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundPosition = 'center center';
+  }
+
+  const rgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mix = (a, b, t) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',') + ')';
+  const ROCK_STOPS = [[0, rgb(col.rock0)], [80, rgb(col.rock1)], [250, rgb(col.rock2)], [600, rgb(col.rock3)], [1200, rgb(col.rock4)]];
+  function rockColor(m){
+    for (let i = 1; i < ROCK_STOPS.length; i++){
+      const [m1, c1] = ROCK_STOPS[i], [m0, c0] = ROCK_STOPS[i - 1];
+      if (m <= m1) return mix(c0, c1, (m - m0) / (m1 - m0));
+    }
+    return mix(ROCK_STOPS[ROCK_STOPS.length - 1][1], ROCK_STOPS[ROCK_STOPS.length - 1][1], 0);
+  }
+  const rockRGBA = (m, a) => rockColor(m).replace('rgb(', 'rgba(').replace(')', ',' + a + ')');
+  function hash(i, j, k){
+    let h = (i * 374761393 + j * 668265263 + k * 2147483647) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  const CELL = 44;
+  const SURFACE_Y = -150;
+  const GRASS_H = 26;
+  const DARK_MAX = 0.82;
+  const DARK_DEPTH = 450;
+  const LIGHT_IN = 110;
+  const LIGHT_OUT = 340;
+
+  function drawSurface(top){
+    const x0 = -WALL - LEVER_AREA, x1 = BOARD_W + WALL + LEVER_AREA, w = x1 - x0;
+    const ground = SURFACE_Y - GRASS_H;
+    const sky = ctx.createLinearGradient(0, ground - 360, 0, ground);
+    sky.addColorStop(0, col.sky); sky.addColorStop(1, col['sky-low']);
+    ctx.fillStyle = sky;
+    ctx.fillRect(x0, top, w, SURFACE_Y - top);
+    ctx.fillStyle = col.hill;
+    ctx.beginPath();
+    ctx.moveTo(x0, ground + 2);
+    for (let x = x0; x <= x1; x += 8){
+      const y = ground - 22 - 16 * Math.sin((x + 40) / 70) - 10 * Math.sin((x + 5) / 31);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(x1, ground + 2);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = col.grass;
+    ctx.fillRect(x0, ground, w, GRASS_H);
+    ctx.strokeStyle = col['grass-dark'];
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let i = 0; i * 5 < w; i++){
+      const x = x0 + i * 5 + hash(i, 7, 1) * 4;
+      const hgt = 4 + hash(i, 7, 2) * 7, lean = (hash(i, 7, 3) - 0.5) * 5;
+      ctx.moveTo(x, ground + 1); ctx.lineTo(x + lean, ground - hgt);
+    }
+    for (let i = 0; i * 9 < w; i++){
+      const x = x0 + i * 9 + hash(i, 8, 1) * 8, y = ground + 6 + hash(i, 8, 2) * (GRASS_H - 10);
+      ctx.moveTo(x, y); ctx.lineTo(x + (hash(i, 8, 3) - 0.5) * 3, y - 3 - hash(i, 8, 4) * 3);
+    }
+    ctx.stroke();
+    ctx.fillStyle = col.soil;
+    ctx.fillRect(x0, SURFACE_Y - 5, w, 5);
+  }
+
+  function drawRock(x0, x1, top, bottom, darker){
+    const step = 30;
+    for (let y = Math.floor(top / step) * step; y < bottom; y += step){
+      ctx.fillStyle = rockColor(depthM(y));
+      ctx.fillRect(x0, y, x1 - x0, step + 1);
+    }
+    for (let j = Math.floor(top / CELL); j * CELL < bottom; j++){
+      for (let i = Math.floor(x0 / CELL); i * CELL < x1; i++){
+        for (let n = 0; n < 2; n++){
+          const hx = hash(i, j, n * 3 + 1), hy = hash(i, j, n * 3 + 2), hs = hash(i, j, n * 3 + 3);
+          const cx = (i + hx) * CELL, cy = (j + hy) * CELL;
+          if (cx < x0 - 10 || cx > x1 + 10) continue;
+          ctx.fillStyle = hs < 0.5 ? 'rgba(0,0,0,' + (darker ? 0.26 : 0.12) + ')' : 'rgba(255,240,220,0.04)';
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, 5 + hs * 12, 3 + hs * 7, hx * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        const m = depthM(j * CELL);
+        if (!darker && m > 120 && hash(i, j, 9) < Math.min(0.12, (m - 120) / 2000)){
+          const cx = (i + hash(i, j, 10)) * CELL, cy = (j + hash(i, j, 11)) * CELL;
+          ctx.fillStyle = hash(i, j, 12) < 0.5 ? col.crystal : col.crystal2;
+          ctx.globalAlpha = 0.55;
+          for (let q = 0; q < 3; q++){
+            const a = -Math.PI / 2 + (q - 1) * 0.45, l = 8 + q % 2 * 5;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l);
+            ctx.lineTo(cx + Math.cos(a + 1.6) * 2.5, cy + Math.sin(a + 1.6) * 2.5);
+            ctx.lineTo(cx + Math.cos(a - 1.6) * 2.5, cy + Math.sin(a - 1.6) * 2.5);
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  function drawTrail(){
+    const pts = [];
+    for (const p of [...trail, { x: coin.x, y: coin.y, t: clock }]){
+      const q = pts[pts.length - 1];
+      if (!q || Math.hypot(p.x - q.x, p.y - q.y) > 1) pts.push(p);
+    }
+    if (pts.length < 2) return;
+    const L = [], R = [];
+    for (let i = 0; i < pts.length; i++){
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
+      const f = Math.max(0, 1 - (clock - pts[i].t) / TRAIL_TIME);
+      const w = COIN_R * (0.2 + 0.75 * f);
+      L.push([pts[i].x - dy / l * w, pts[i].y + dx / l * w]);
+      R.push([pts[i].x + dy / l * w, pts[i].y - dx / l * w]);
+    }
+    const t0 = pts[0], t1 = pts[pts.length - 1];
+    const g = ctx.createLinearGradient(t0.x, t0.y, t1.x, t1.y);
+    g.addColorStop(0, rgbaOf(col['coin-hi'], 0));
+    g.addColorStop(1, rgbaOf(col['coin-hi'], TRAIL_ALPHA));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(L[0][0], L[0][1]);
+    for (let i = 1; i < L.length; i++) ctx.lineTo(L[i][0], L[i][1]);
+    for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+    ctx.closePath(); ctx.fill();
+  }
+  const rgbaOf = (hex, a) => 'rgba(' + rgb(hex).join(',') + ',' + a + ')';
+
+  function roundRectPath(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // v3 銘牌：貼拉桿同側岩壁、拉桿下緣外側；文字走 floorInfo()，只畫可見段
+  function drawPlaque(lv, i){
+    const py = lv.rest.y;
+    // 左右鏡像：外牆內縮 1 單位，牌子落在牆條內、不被畫布邊界裁掉
+    const x0 = lv.side < 0 ? -WALL - LEVER_AREA + 1 : BOARD_W + WALL + 1;
+    const y0 = py + PLAQUE_OFFSET_Y;
+    const w = PLAQUE_W, h = PLAQUE_H, r = PLAQUE_R;
+    // 1) 底座投影（與岩壁協調的柔影，避免硬黑方塊）
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.28)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetY = 2;
+    // 2) 陳年黃銅／青銅漸層（5 段，明度明顯低於金幣）
+    const g = ctx.createLinearGradient(x0, y0, x0 + w, y0 + h);
+    g.addColorStop(0, '#c8a24a');
+    g.addColorStop(0.25, '#a8863a');
+    g.addColorStop(0.5, '#9a7a2e');
+    g.addColorStop(0.75, '#755922');
+    g.addColorStop(1, '#5c451a');
+    roundRectPath(x0, y0, w, h, r);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+    // 外暗描邊：讓牌子從岩壁立起來
+    roundRectPath(x0 + 0.5, y0 + 0.5, w - 1, h - 1, r);
+    ctx.strokeStyle = 'rgba(30,20,8,0.7)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // 3) 加厚倒角：上/左 1.5px 亮邊，下/右 1.5px 暗邊
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255,240,205,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(x0 + r, y0 + 0.75); ctx.lineTo(x0 + w - r, y0 + 0.75);
+    ctx.moveTo(x0 + 0.75, y0 + r); ctx.lineTo(x0 + 0.75, y0 + h - r);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(50,34,10,0.65)';
+    ctx.beginPath();
+    ctx.moveTo(x0 + r, y0 + h - 0.75); ctx.lineTo(x0 + w - r, y0 + h - 0.75);
+    ctx.moveTo(x0 + w - 0.75, y0 + r); ctx.lineTo(x0 + w - 0.75, y0 + h - r);
+    ctx.stroke();
+    // 4) 內凹：頂部內陰影（高 3 單位向下漸淡）+ 內側暗線
+    ctx.save();
+    roundRectPath(x0 + 1.5, y0 + 1.5, w - 3, h - 3, Math.max(1, r - 1));
+    ctx.clip();
+    const ish = ctx.createLinearGradient(0, y0, 0, y0 + 3);
+    ish.addColorStop(0, 'rgba(0,0,0,0.35)');
+    ish.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ish;
+    ctx.fillRect(x0 + 1.5, y0, w - 3, 3);
+    ctx.restore();
+    roundRectPath(x0 + 1.5, y0 + 1.5, w - 3, h - 3, Math.max(1, r - 1));
+    ctx.strokeStyle = 'rgba(40,26,8,0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // 5) 青銅鏽斑：偏綠，hash 固定，≤6，alpha ≤0.10
+    for (let n = 0; n < PLAQUE_WEAR; n++){
+      const hx = hash(i, n, 11), hy = hash(i, n, 12), hs = hash(i, n, 13);
+      ctx.fillStyle = 'rgba(90,115,80,' + (0.05 + hs * 0.05).toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.ellipse(x0 + 4 + hx * (w - 8), y0 + 4 + hy * (h - 8), 1.2 + hs * 1.6, 0.8 + hs, hx * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 6) 四角鉚釘（帶高光）
+    const rivets = [[x0 + 3, y0 + 3], [x0 + w - 3, y0 + 3], [x0 + 3, y0 + h - 3], [x0 + w - 3, y0 + h - 3]];
+    for (const [rx, ry] of rivets){
+      ctx.beginPath(); ctx.arc(rx, ry, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#5c451a'; ctx.fill();
+      ctx.beginPath(); ctx.arc(rx - 0.3, ry - 0.3, 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,240,205,0.55)'; ctx.fill();
+    }
+    // 7) 陰刻字：壓暗填字 + 右下 1 單位低 alpha 亮邊，字距 +0.5
+    const f = floorInfo(i);
+    const label = f.main;  // R4：銘牌與 HUD 同源，僅顯示 B#，不再並列 floorNo-seg 舊口徑
+    ctx.font = 'bold ' + PLAQUE_FONT + 'px ' + FONT;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    try { ctx.letterSpacing = '0.5px'; } catch(e){}
+    ctx.fillStyle = '#2a1e06';
+    ctx.fillText(label, x0 + w / 2, y0 + h / 2);
+    ctx.fillStyle = 'rgba(255,240,205,0.28)';
+    ctx.fillText(label, x0 + w / 2 + 1, y0 + h / 2 + 1);
+    try { ctx.letterSpacing = '0px'; } catch(e){}
+  }
+
+  function drawLever(lv, pull){    const wx = lv.side < 0 ? -WALL : BOARD_W + WALL;
+    const py = lv.rest.y;
+    const ang = (20 + pull * 40) * Math.PI / 180;
+    const len = LEVER_AREA - LEVER_KNOB_R - 2;
+    const ex = wx + lv.side * Math.sin(ang) * len;
+    const ey = py - Math.cos(ang) * len;
+    ctx.fillStyle = col['lever-line'];
+    ctx.fillRect(wx - 5, py - 7, 10, 14);
+    ctx.strokeStyle = col['lever-line'];
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(wx, py); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.arc(ex, ey, LEVER_KNOB_R, 0, Math.PI * 2);
+    ctx.fillStyle = col.lever; ctx.fill();
+    ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  function drawExitDoor(lv){
+    const x0 = lv.side < 0 ? -WALL : BOARD_W;
+    const h = 66, cy = lv.rest.y - h * 0.4;
+    const g = ctx.createLinearGradient(x0, 0, x0 + WALL, 0);
+    g.addColorStop(0, 'rgba(255,236,186,0.30)');
+    g.addColorStop(1, 'rgba(255,236,186,0.06)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, cy, WALL, h);
+    ctx.fillStyle = 'rgba(38,30,26,0.85)';
+    ctx.fillRect(x0 + (lv.side < 0 ? 3 : -3), cy + 4, WALL - 6, h - 8);
+    ctx.strokeStyle = col['accent-exit'];
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0 + 1.5, cy + 1.5, WALL - 3, h - 3);
+    ctx.fillStyle = 'rgba(255,240,200,0.55)';
+    ctx.fillRect(x0 + (lv.side < 0 ? WALL - 3 : 0), cy + 6, 3, h - 12);
+  }
+
+  function drawPlank(sg, alpha){
+    const p = sg.a.x <= sg.b.x ? sg.a : sg.b, q = p === sg.a ? sg.b : sg.a;
+    const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy);
+    ctx.save();
+    ctx.globalAlpha = alpha == null ? 1 : alpha;
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.fillStyle = col['plank-dark'];
+    ctx.fillRect(0, -1, len, 11);
+    ctx.fillStyle = col.plank;
+    ctx.fillRect(0, 0, len, 8);
+    ctx.fillStyle = 'rgba(255,230,190,0.18)';
+    ctx.fillRect(0, 0, len, 1.5);
+    ctx.fillStyle = col.nail;
+    for (let d = 10; d < len - 4; d += 38){
+      ctx.beginPath(); ctx.arc(d, 4, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawRockFace(x, y, r, tint, noStem){
+    if (!noStem){
+      ctx.fillStyle = col['wall-edge'];
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.55, y - r * 0.4);
+      ctx.lineTo(x - r * 0.2, y - r - ROCK_STEM);
+      ctx.lineTo(x + r * 0.2, y - r - ROCK_STEM);
+      ctx.lineTo(x + r * 0.55, y - r * 0.4);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = tint || col.rock1; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = col['wall-edge']; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,240,220,0.12)';
+    ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.25, r * 0.4, 0, Math.PI * 2); ctx.fill();
+    const ey = y - r * 0.08, ex = r * 0.32;
+    ctx.strokeStyle = col.hole; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x - ex - r * 0.18, ey - r * 0.32); ctx.lineTo(x - ex + r * 0.14, ey - r * 0.14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + ex + r * 0.18, ey - r * 0.32); ctx.lineTo(x + ex - r * 0.14, ey - r * 0.14); ctx.stroke();
+    for (const s of [-1, 1]){
+      ctx.beginPath(); ctx.arc(x + s * ex, ey, r * 0.17, 0, Math.PI * 2);
+      ctx.fillStyle = col.fg; ctx.fill();
+      ctx.beginPath(); ctx.arc(x + s * ex + s * 2, ey + 1, r * 0.08, 0, Math.PI * 2);
+      ctx.fillStyle = col.hole; ctx.fill();
+    }
+  }
+
+  // 晶眼 Boss：結晶飛眼，獨立繪製
+  function drawEyeFace(x, y, r){
+    const bob = Math.sin(clock * 4) * 2;
+    ctx.save();
+    ctx.translate(x, y + bob);
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.9, r * 0.78, 0, 0, Math.PI * 2);
+    ctx.fillStyle = col['accent-crystal']; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = col.crystal2; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.5, r * 0.42, 0, 0, Math.PI * 2);
+    ctx.fillStyle = col.hole; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = col.fg; ctx.fill();
+    // 結晶尖刺
+    ctx.fillStyle = col.crystal2;
+    for (const s of [-1, 1]){
+      ctx.beginPath();
+      ctx.moveTo(s * r * 0.7, -r * 0.3);
+      ctx.lineTo(s * r * 1.15, -r * 0.7);
+      ctx.lineTo(s * r * 0.95, 0);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawChaseBoss(){
+    if (!boss || boss.mode !== 'chase') return;
+    const p = boss.close == null ? boss.progress : boss.close, r = BOSS_R;
+    const shakeAmt = p > 0.6 ? Math.sin(clock * 30) * (p - 0.6) * 6 : 0;
+    const x = boss.x + shakeAmt, y = boss.y;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(x, y + r * 0.94, r * 0.9, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+    if (boss.type === 'eye'){
+      drawEyeFace(x, y, r);
+    } else if (boss.type === 'armor'){
+      const fury = boss.armor === 0;
+      ctx.save(); ctx.translate(x, y);
+      drawRockFace(0, 0, r, fury ? 'rgb(140,64,52)' : col.rock1, true);
+      ctx.restore();
+      // 三片護甲弧：碎一片熄一顆，不留殘影
+      const armorGrad = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+      armorGrad.addColorStop(0, '#8a6a3a');
+      armorGrad.addColorStop(1, '#c9a24a');
+      for (let i = 0; i < ARMOR_COUNT; i++){
+        const a0 = -Math.PI / 2 + i * (Math.PI * 2 / ARMOR_COUNT) + 0.12;
+        const a1 = a0 + Math.PI * 2 / ARMOR_COUNT - 0.24;
+        ctx.save();
+        if (i < boss.armor){
+          ctx.shadowColor = 'rgba(201,162,74,.15)';
+          ctx.shadowBlur = 4;
+          ctx.strokeStyle = armorGrad;
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(x, y, r + 4, a0, a1); ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = 'rgba(255,240,205,.35)';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath(); ctx.arc(x, y, r + 5.5, a0, a1); ctx.stroke();
+        } else {
+          ctx.strokeStyle = 'rgba(241,230,210,.18)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(x, y, r + 4, a0, a1); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    } else {
+      const tint = p > 0.66 ? 'rgb(120,70,60)' : col.rock1;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(boss.roll);
+      drawRockFace(0, 0, r, tint, true);
+      ctx.restore();
+    }
+  }
+
+  function drawCutBoss(){
+    if (!boss || boss.mode !== 'cut') return;
+    const r = BOSS_R;
+    const dash = Math.min(1, boss.t / 0.4);
+    const fromX = boss.sx != null ? boss.sx : boss.x;
+    let x = fromX + (boss.doorX - fromX) * dash;
+    if (boss.rams > 0){
+      const phase = boss.rams === 1 ? boss.t - 0.55 : boss.t - 1.15;
+      if (phase >= 0 && phase < 0.18) x += Math.sin(phase * 60) * 5 * (1 - phase / 0.18);
+    }
+    if (boss.t > 1.4) x += (boss.t - 1.4) * 120 * Math.sign(boss.doorX - fromX || 1);
+    const roll = boss.t < 0.4 ? boss.t / 0.4 * Math.PI * 3 : Math.PI * 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(x, boss.y + r * 0.94, r * 0.9, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+    if (boss.type === 'eye') drawEyeFace(x, boss.y, r);
+    else {
+      ctx.save(); ctx.translate(x, boss.y); ctx.rotate(roll);
+      drawRockFace(0, 0, r, col.rock1, true);
+      ctx.restore();
+    }
+  }
+
+  function drawRockBump(rk){
+    ctx.fillStyle = col['wall-edge'];
+    ctx.beginPath();
+    ctx.moveTo(rk.x - rk.r * 0.9, rk.y - rk.r * 0.3);
+    ctx.lineTo(rk.x - rk.r * 0.35, rk.y - rk.r - ROCK_STEM);
+    ctx.lineTo(rk.x + rk.r * 0.35, rk.y - rk.r - ROCK_STEM);
+    ctx.lineTo(rk.x + rk.r * 0.9, rk.y - rk.r * 0.3);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(rk.x, rk.y, rk.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,220,0.15)';
+    ctx.beginPath(); ctx.arc(rk.x - rk.r * 0.3, rk.y - rk.r * 0.2, rk.r * 0.45, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawBreakRock(rk){
+    drawRockBump(rk);
+    ctx.strokeStyle = 'rgba(20,14,8,.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(rk.x - rk.r * 0.5, rk.y - rk.r * 0.3); ctx.lineTo(rk.x, rk.y); ctx.lineTo(rk.x + rk.r * 0.4, rk.y + rk.r * 0.4);
+    ctx.moveTo(rk.x, rk.y); ctx.lineTo(rk.x - rk.r * 0.2, rk.y + rk.r * 0.5);
+    ctx.stroke();
+  }
+
+  function drawMech(lv){
+    const mx = d => lv.side < 0 ? d : BOARD_W - d;
+    const m = lv.mech;
+    if (m.type === 'ice'){
+      ctx.save(); ctx.globalAlpha = 0.22; ctx.strokeStyle = '#9fd8e8'; ctx.lineWidth = 2;
+      for (const sg of lv.segs){ ctx.beginPath(); ctx.moveTo(sg.a.x, sg.a.y - 1); ctx.lineTo(sg.b.x, sg.b.y - 1); ctx.stroke(); }
+      ctx.restore();
+    } else if (m.type === 'wind'){
+      const x0 = mx(m.d0), x1 = mx(m.d1), y = railY(lv, (m.d0 + m.d1) / 2) - 14;
+      ctx.save(); ctx.strokeStyle = 'rgba(180,210,230,.35)'; ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i++){
+        const yy = y + i * 7 + Math.sin(clock * 6 + i) * 2;
+        ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke();
+      }
+      ctx.restore();
+    } else if (m.type === 'pad'){
+      const x0 = mx(m.d0), x1 = mx(m.d1), y = railY(lv, (m.d0 + m.d1) / 2) + 14;
+      ctx.fillStyle = m.used ? 'rgba(120,90,50,.4)' : col['lever-line'];
+      ctx.fillRect(x0, y, x1 - x0, 5);
+    } else if (m.type === 'mover'){
+      const mid = (m.d0 + m.d1) / 2;
+      const off = MECH_MOVER_AMP * Math.sin(2 * Math.PI * m.t / MECH_MOVER_PERIOD + m.phase);
+      const pd = Math.max(m.d0, Math.min(m.d1, mid + off));
+      const px = mx(pd), py = railY(lv, pd) - 4;
+      ctx.fillStyle = 'rgba(150,110,60,.85)';
+      ctx.fillRect(px - MECH_MOVER_HALF, py, MECH_MOVER_HALF * 2, 6);
+      ctx.strokeStyle = 'rgba(50,34,10,.6)'; ctx.lineWidth = 1;
+      ctx.strokeRect(px - MECH_MOVER_HALF, py, MECH_MOVER_HALF * 2, 6);
+    } else if (m.type === 'portal'){
+      const pa = { x: mx(m.a), y: railY(lv, m.a) - COIN_R - 2 };
+      const pb = { x: mx(m.b), y: railY(lv, m.b) - COIN_R - 2 };
+      const fade = m.cd > 0 ? Math.max(0.25, m.cd / MECH_PORTAL_FADE) : 1;
+      ctx.save(); ctx.globalAlpha = fade;
+      ctx.strokeStyle = '#78b4ff'; ctx.lineWidth = 1.6;
+      for (const p of [pa, pb]){
+        ctx.beginPath(); ctx.arc(p.x, p.y, MECH_PORTAL_R, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, MECH_PORTAL_R * 0.55, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    } else if (m.type === 'rotor'){
+      const pivot = { x: mx(m.d), y: railY(lv, m.d) - 10 };
+      const ang = 2 * Math.PI * m.t / MECH_ROTOR_PERIOD + m.phase;
+      const ex = pivot.x + MECH_ROTOR_ARM * Math.cos(ang);
+      const ey = pivot.y + MECH_ROTOR_ARM * Math.sin(ang);
+      ctx.strokeStyle = 'rgba(180,140,80,.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(pivot.x, pivot.y); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.fillStyle = '#c9a24a';
+      ctx.beginPath(); ctx.arc(ex, ey, MECH_ROTOR_R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(50,34,10,.7)';
+      ctx.beginPath(); ctx.arc(pivot.x, pivot.y, 3, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function drawHole(ho){
+    const g = ctx.createRadialGradient(ho.x, ho.y + ho.r * 0.2, ho.r * 0.2, ho.x, ho.y, ho.r);
+    g.addColorStop(0, col.hole);
+    g.addColorStop(0.75, col.hole);
+    g.addColorStop(1, col['hole-rim']);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(ho.x, ho.y, ho.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  const SINK_EDGE = 0.45;
+  const FALL_DROP = 0.3;
+  function fallPose(){
+    const t = Math.min(1, fallT / FALL_TIME);
+    const x = fallFrom.x;
+    const above = fallFrom.y < fallHole.y - 2;
+    if (above && t < FALL_DROP){
+      const k = t / FALL_DROP;
+      return { x, y: fallFrom.y + (fallHole.y - fallFrom.y) * k * k, r: COIN_R, sink: false };
+    }
+    const y0 = above ? fallHole.y : fallFrom.y;
+    const k = above ? (t - FALL_DROP) / (1 - FALL_DROP) : t;
+    return {
+      x: x + (fallHole.x - x) * Math.min(1, k * 2), y0, k,
+      y: y0 + (fallHole.y + fallHole.r + COIN_R - y0) * k * k,
+      r: COIN_R * (1 - 0.2 * k), shade: 0.75 * k, sink: true
+    };
+  }
+
+  function drawCoin(px, py, r){
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = col.coin; ctx.fill();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = col['coin-line']; ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py, r * 0.72, 0, Math.PI * 2);
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = col['coin-hi'];
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.arc(px - r * 0.38, py - r * 0.38, r * 0.24, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function lightScale(){
+    const lv = levels[here];
+    if (!lv) return 1;
+    let s = 1;
+    if (lv.event === 'dark') s = 0.55 * lightBonus();
+    else if (lv.event === 'echo') s = ECHO_LIGHT_MULT;
+    if (mod === 'dim') s *= MOD_DIM_LIGHT;
+    return s;
+  }
+
+  function draw(){
+    ctx.fillStyle = col.bg;
+    ctx.fillRect(0, 0, W, H);
+    const vh = viewH();
+
+    let shx = 0, shy = 0;
+    if (shake.t < shake.dur && shake.dur > 0){
+      const k = 1 - shake.t / shake.dur;
+      shx = rand(-shake.mag, shake.mag) * k;
+      shy = rand(-shake.mag, shake.mag) * k;
+    }
+
+    ctx.save();
+    ctx.scale(SC, SC);
+    ctx.translate(WALL + LEVER_AREA + shx, -camY + shy);
+    const top = camY - 80, bottom = camY + vh + 80;
+
+    drawRock(0, BOARD_W, top, bottom, false);
+    if (top < SURFACE_Y) drawSurface(top);
+    const wt = Math.max(top, SURFACE_Y);
+    if (wt < bottom){
+      drawRock(-WALL - LEVER_AREA, -WALL, wt, bottom, true);
+      drawRock(BOARD_W + WALL, BOARD_W + WALL + LEVER_AREA, wt, bottom, true);
+      ctx.fillStyle = col.wall;
+      ctx.fillRect(-WALL, wt, WALL, bottom - wt);
+      ctx.fillRect(BOARD_W, wt, WALL, bottom - wt);
+      ctx.fillStyle = col['wall-edge'];
+      ctx.fillRect(-1.5, wt, 1.5, bottom - wt);
+      ctx.fillRect(BOARD_W, wt, 1.5, bottom - wt);
+    }
+
+    const visible = levels.filter(lv => !(lv.a.y < top - 100 || lv.topY > bottom + 100));
+    for (const lv of visible) for (const ho of lv.holes) drawHole(ho);
+
+    const pose = state === 'fall' ? fallPose() : null;
+    if (pose && pose.sink){
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(fallHole.x, fallHole.y, fallHole.r, 0, Math.PI * 2);
+      const rim = (COIN_R + 1) * Math.max(0, 1 - pose.k / SINK_EDGE);
+      if (rim > 0){ ctx.moveTo(pose.x + rim, pose.y0); ctx.arc(pose.x, pose.y0, rim, 0, Math.PI * 2); }
+      ctx.clip();
+      drawCoin(pose.x, pose.y, pose.r);
+      ctx.globalAlpha = pose.shade;
+      ctx.beginPath(); ctx.arc(pose.x, pose.y, pose.r + 1, 0, Math.PI * 2);
+      ctx.fillStyle = col.hole; ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    for (let i = 0; i < levels.length; i++){
+      const lv = levels[i];
+      if (lv.a.y < top - 100 || lv.topY > bottom + 100) continue;
+      const exitAlpha = lv.arena && lv.arena.exit ? 0.32 : 1;
+      for (const sg of lv.segs) drawPlank(sg, exitAlpha);
+      if (lv.arena && lv.arena.exit){
+        drawExitDoor(lv);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,240,205,0.5)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(lv.segs[0].a.x, lv.segs[0].a.y - 1);
+        for (const sg of lv.segs) ctx.lineTo(sg.b.x, sg.b.y - 1);
+        ctx.stroke();
+        ctx.restore();
+      }
+      for (const rk of lv.rocks){ if (rk.breakable) drawBreakRock(rk); else drawRockBump(rk); }
+      // v4 機關視覺
+      if (lv.mech) drawMech(lv);
+      // v4 岔路封閉側：一條淡封印短槓，標示另一側已關閉
+      if (lv.relic && lv.relic.closed){
+        const cy = railY(lv, BOARD_W / 2) - 12;
+        const cx = lv.relic.closed === 'left' ? WALL + 24 : BOARD_W - WALL - 24;
+        ctx.strokeStyle = 'rgba(60,40,16,.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx - 10, cy); ctx.lineTo(cx + 10, cy); ctx.stroke();
+      }
+      // 彈簧台視覺
+      if (lv.spring){
+        const x0 = lv.side < 0 ? lv.spring.d0 : BOARD_W - lv.spring.d1;
+        const x1 = lv.side < 0 ? lv.spring.d1 : BOARD_W - lv.spring.d0;
+        const y0 = railY(lv, (lv.spring.d0 + lv.spring.d1) / 2);
+        ctx.fillStyle = col['lever-line'];
+        ctx.fillRect(x0, y0 - 6, x1 - x0, 6);
+        ctx.strokeStyle = col.lever;
+        ctx.lineWidth = 1.4;
+        for (let sx = x0 + 3; sx < x1 - 3; sx += 5){
+          ctx.beginPath(); ctx.moveTo(sx, y0 - 6); ctx.lineTo(sx + 2, y0 - 1); ctx.stroke();
+        }
+      }
+      // 寶石
+      for (const g of lv.gems){
+        if (g.taken) continue;
+        const tw = 0.6 + 0.4 * Math.sin(clock * 5 + g.d);
+        ctx.save();
+        ctx.globalAlpha = tw;
+        ctx.fillStyle = col['coin-hi'];
+        ctx.beginPath();
+        ctx.moveTo(g.x, g.y - 5); ctx.lineTo(g.x + 4, g.y); ctx.lineTo(g.x, g.y + 5); ctx.lineTo(g.x - 4, g.y);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      // 結晶層金貨微光
+      if (lv.event === 'crystal' && i === here){
+        const g = ctx.createRadialGradient(coin.x, coin.y, 2, coin.x, coin.y, COIN_R * 2.4);
+        g.addColorStop(0, rgbaOf(col.crystal, 0.35));
+        g.addColorStop(1, rgbaOf(col.crystal, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(coin.x, coin.y, COIN_R * 2.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = col.plank;
+      for (let j = 1; j < lv.segs.length; j++){
+        const p0 = lv.segs[j - 1].b, p1 = lv.segs[j].a;
+        if (Math.abs(p0.x - p1.x) < 0.5 && Math.abs(p0.y - p1.y) < 0.5){
+          ctx.beginPath(); ctx.arc(p0.x, p0.y + 4, 4.2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      drawLever(lv, i === here && charging ? power : 0);
+      drawPlaque(lv, i);
+      // 首局引導：首次發射前拉桿脈動箭頭（無文字，發射後永久消失）
+      if (i === here && !run.firstLaunch && !firstLaunchDone && state === 'play' && !charging){
+        const wx = lv.side < 0 ? -WALL : BOARD_W + WALL;
+        const ang = 20 * Math.PI / 180;
+        const len = LEVER_AREA - LEVER_KNOB_R - 2;
+        const ex = wx + lv.side * Math.sin(ang) * len;
+        const ey = lv.rest.y - Math.cos(ang) * len;
+        const dx = lv.side * Math.sin(ang), dy = -Math.cos(ang);
+        const px = -dy, py = dx;
+        const cx = ex + dx * 13, cy = ey + dy * 13;
+        const tipx = ex + dx * 6, tipy = ey + dy * 6;
+        const pulse = 0.55 + 0.3 * Math.sin(performance.now() / 180);
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = col.coin;
+        ctx.beginPath();
+        ctx.moveTo(tipx, tipy);
+        ctx.lineTo(cx + px * 7, cy + py * 7);
+        ctx.lineTo(cx - px * 7, cy - py * 7);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
+    drawChaseBoss();
+    drawCutBoss();
+
+    // 粒子（局部，不溢出棋盤）
+    for (const p of particles){
+      const a = 1 - p.t / p.life;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // 未生成段落以岩色漸層遮蔽
+    const last = levels[levels.length - 1];
+    const lastBottom = Math.max(last.a.y, ...last.segs.map(sg => Math.max(sg.a.y, sg.b.y)), ...last.holes.map(ho => ho.y + ho.r));
+    const fy0 = (lastBottom + FOG_START - camY) * SC, fy1 = fy0 + FOG_H * SC;
+    if (fy0 < H){
+      const g = ctx.createLinearGradient(0, fy0, 0, fy1);
+      const fm = depthM(lastBottom + FOG_START + FOG_H);
+      g.addColorStop(0, rockRGBA(fm, 0));
+      g.addColorStop(1, rockRGBA(fm, 1));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, fy0, W, fy1 - fy0);
+      ctx.fillStyle = rockColor(fm);
+      if (fy1 < H) ctx.fillRect(0, fy1, W, H - fy1);
+    }
+    const sy0 = H * (1 - FOG_SCREEN);
+    const sg = ctx.createLinearGradient(0, sy0, 0, H);
+    const sm = depthM(camY + vh);
+    sg.addColorStop(0, rockRGBA(sm, 0));
+    sg.addColorStop(1, rockRGBA(sm, 1));
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, sy0, W, H - sy0);
+
+    // 幽暗／回聲層照明
+    const lx = pose ? pose.x : coin.x, ly = pose ? pose.y : coin.y;
+    const sx = (lx + WALL + LEVER_AREA) * SC, sy = (ly - camY) * SC;
+    const ls = lightScale();
+    const dark = Math.min(DARK_MAX, depthM(coin.y) / DARK_DEPTH * DARK_MAX);
+    if (dark > 0.01){
+      const g = ctx.createRadialGradient(sx, sy, LIGHT_IN * SC * ls, sx, sy, LIGHT_OUT * SC * ls);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,' + dark.toFixed(3) + ')');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 中央橫幅（全畫面同時最多一條）
+    if (banner.t < banner.dur && banner.text){
+      const fadeIn = Math.min(1, banner.t / 0.2);
+      const fadeOut = Math.min(1, Math.max(0, (banner.dur - banner.t) / 0.4));
+      ctx.save();
+      ctx.globalAlpha = Math.min(fadeIn, fadeOut);
+      ctx.font = 'bold 26px ' + FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = col.fg;
+      ctx.fillText(banner.text, W / 2, H * 0.24);
+      ctx.restore();
+    }
+
+    // 金貨本體（含殘影、預覽弧、回聲殘影）
+    if (state !== 'over' && !(pose && pose.sink)){
+      ctx.save();
+      ctx.scale(SC, SC);
+      ctx.translate(WALL + LEVER_AREA, -camY);
+      if (pose) drawCoin(pose.x, pose.y, pose.r);
+      else {
+        // M1 預測弧：淡虛線
+        const preview = computePreview();
+        if (preview.length >= 2){
+          ctx.save();
+          ctx.strokeStyle = rgbaOf(col.coin, PREVIEW_ALPHA);
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          preview.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+          ctx.stroke();
+          ctx.restore();
+        }
+        // 回聲層殘影
+        const lvHere = levels[here];
+        if (lvHere && lvHere.event === 'echo'){
+          for (let i = 0; i < Math.min(ECHO_GHOSTS, trail.length); i++){
+            const p = trail[trail.length - 1 - i];
+            ctx.globalAlpha = 0.18 * (1 - i / ECHO_GHOSTS);
+            ctx.beginPath(); ctx.arc(p.x, p.y, COIN_R, 0, Math.PI * 2);
+            ctx.strokeStyle = col['accent-crystal']; ctx.lineWidth = 1.4; ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+        }
+        drawTrail();
+        // 蓄力回饋：26px 外圈細環（半徑 13）+ 2px 力道弧（不顯示數字）
+        if (charging){
+          const danger = power * 100 >= STRONG_FROM;
+          ctx.save();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = rgbaOf(col['coin-line'], 0.5);
+          ctx.beginPath(); ctx.arc(coin.x, coin.y, COIN_R + 1, 0, Math.PI * 2); ctx.stroke();
+          ctx.strokeStyle = danger ? col['accent-danger'] : col.coin;
+          ctx.beginPath();
+          ctx.arc(coin.x, coin.y, COIN_R + 1, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        drawCoin(coin.x, coin.y, COIN_R);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ================= 迴圈 =================
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min((now - last) / 1000, 1 / 30);
+    last = now;
+    genBudget = GEN_TRIALS_PER_FRAME;  // R1：長跑每幀重置 trial 後備
+    genDeadline = now + GEN_FRAME_MS;  // R1：本幀生成時間片 3ms，其餘段下幀續補
+    ensureLevels(2);
+    ensureLevels(LEVELS_AHEAD);
+    update(dt);
+    updateToast();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function updateToast(){
+    const toast = $('toast');
+    if (toastT < 2 && toastText){ toast.textContent = toastText; toast.classList.add('on'); }
+    else toast.classList.remove('on');
+  }
+
+  // ================= 覆蓋層（選單／圖鑑／統計／成就／說明） =================
+  function openPanel(title, html){
+    lastFocus = document.activeElement;
+    $('panelTitle').textContent = title;
+    $('panelBody').innerHTML = html;
+    $('panel').classList.remove('treeFull');
+    $('overlay').classList.remove('treeFull');
+    $('game').classList.remove('treeFull');
+    $('overlay').classList.remove('hidden');
+    const close = $('panelClose');
+    if (close) close.focus();
+  }
+  function closePanel(){
+    $('overlay').classList.add('hidden'); resetArmed = false;
+    $('panel').classList.remove('treeFull');
+    $('overlay').classList.remove('treeFull');
+    $('game').classList.remove('treeFull');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  function codexCount(){ return codex.size + '/' + Object.values(CODEX).reduce((n, a) => n + a.length, 0); }
+
+  let resetArmed = false;
+  let lastFocus = null;
+  function startDaily(){ dailyMode = true; closePanel(); reset(); }
+  function quitDaily(){ dailyMode = false; closePanel(); reset(); }
+
+  function startMode(m){ gameMode = m; saveJSON(MODE_KEY, m); dailyMode = false; modeSeed = m === 'puzzle' ? (customSeed ? seedFromString(customSeed) : Math.floor(Math.random() * 1e9)) : null; closePanel(); reset(); }
+  function openMenu(){
+    sfx.ui();
+    const previewOn = settings.preview ? '開' : '關';
+    const soundOn = settings.muted ? '關' : '開';
+    const previewRow = previewUnlocked()
+      ? `<button class="sm" data-toggle="preview"><span class="k">輔助線</span> <span class="v">${previewOn}</span></button>`
+      : `<button type="button" class="sm lockedRow" disabled><span class="k">輔助線</span> <span class="v">未解鎖</span></button>`;
+    const resetLabel = resetArmed ? '確定清除進度？再按一次' : '重置進度';
+    const dailyLabel = dailyMode ? '結束每日挑戰' : '每日挑戰';
+    const dailyVal = dailyMode ? '進行中' : (dailyDone ? '已完成' : (dailyBest > 0 ? '最佳 B' + dailyBest : '每日重設'));
+    const typeName = COIN_TYPES[coinType].n;
+    const modeLabel = { normal: '一般冒險', rush: 'Boss Rush', sprint: '限時衝刺', puzzle: '殘局挑戰' }[gameMode];
+    openPanel('選單', `
+      <div class="menuSec">冒險</div>
+      <div class="menuList">
+        <button data-m="normal"><span class="k">一般冒險</span> <span class="v">${modeLabel === '一般冒險' ? '進行中' : ''}</span></button>
+        <button data-m="${dailyMode ? 'quitdaily' : 'daily'}"><span class="k">${dailyLabel}</span> <span class="v">${dailyVal}</span></button>
+      </div>
+      <div class="menuList grid2">
+        <button class="sm" data-m="rush"><span class="k">Rush 連戰</span> <span class="v">連勝 ${rushBest}</span></button>
+        <button class="sm" data-m="sprint"><span class="k">限時衝刺</span> <span class="v">最佳 ${sprintBest}s</span></button>
+        <button class="sm" data-m="puzzle"><span class="k">殘局挑戰</span> <span class="v">可重現</span></button>
+        <button class="sm" data-m="tasks"><span class="k">每日委託</span> <span class="v"></span></button>
+        <button class="sm" data-m="types"><span class="k">金貨型態</span> <span class="v">${typeName}</span></button>
+        <button class="sm" data-m="seed"><span class="k">自訂種子</span> <span class="v">${customSeed || '隨機'}</span></button>
+      </div>
+      <div class="menuSec">收藏</div>
+      <div class="menuList grid2">
+        <button class="sm" data-m="codex"><span class="k">圖鑑</span> <span class="v">${codexCount()}</span></button>
+        <button class="sm" data-m="stats"><span class="k">統計</span> <span class="v"></span></button>
+        <button class="sm" data-m="ach"><span class="k">成就</span> <span class="v">${ach.size}/${ACHS.length}</span></button>
+        <button class="sm" data-m="leader"><span class="k">排行榜</span> <span class="v"></span></button>
+      </div>
+      <div class="menuSec">養成</div>
+      <div class="menuList grid2">
+        <button class="sm" data-m="shop"><span class="k">升級樹</span> <span class="v">${coins} 幣</span></button>
+        <button class="sm" data-m="passive"><span class="k">被動槽</span> <span class="v"></span></button>
+        <button class="sm" data-m="suite"><span class="k">永久套裝</span> <span class="v"></span></button>
+        <button class="sm" data-m="sink"><span class="k">遺跡商店</span> <span class="v">福袋</span></button>
+      </div>
+      <div class="menuSec">設定</div>
+      <div class="menuList grid2">
+        <button class="sm" data-m="help"><span class="k">說明</span> <span class="v"></span></button>
+        <button class="sm" data-toggle="muted"><span class="k">音效</span> <span class="v">${soundOn}</span></button>
+        <button class="sm" data-toggle="fx"><span class="k">動效</span> <span class="v">${settings.fx ? '開' : '關'}</span></button>
+        <button class="sm gridFull" data-reset><span class="k">${resetLabel}</span></button>
+        <div class="gridFull">${previewRow}</div>
+      </div>`);
+    const body = $('panelBody');
+    body.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => {
+      const m = b.dataset.m;
+      if (m === 'shop') openShop();
+      else if (m === 'codex') openCodex();
+      else if (m === 'stats') openStats();
+      else if (m === 'ach') openAch();
+      else if (m === 'help') openHelp();
+      else if (m === 'leader') openLeader();
+      else if (m === 'tasks') openTasks();
+      else if (m === 'passive') openPassive();
+      else if (m === 'suite') openSuite();
+      else if (m === 'sink') openSink();
+      else if (m === 'types') openTypes();
+      else if (m === 'seed') openSeed();
+      else if (m === 'normal') startMode('normal');
+      else if (m === 'rush') startMode('rush');
+      else if (m === 'sprint') startMode('sprint');
+      else if (m === 'puzzle') startMode('puzzle');
+      else if (m === 'daily') startDaily();
+      else if (m === 'quitdaily') quitDaily();
+    }));
+    body.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.toggle;
+      if (k === 'preview' && !previewUnlocked()) return;
+      settings[k] = !settings[k];
+      persistSettings();
+      openMenu();
+    }));
+    body.querySelector('[data-reset]').addEventListener('click', () => {
+      if (!resetArmed){ resetArmed = true; openMenu(); return; }
+      resetArmed = false;
+      resetProgress();
+      openMenu();
+    });
+  }
+
+  // ---- v4 金貨型態選擇（不花幣；trial 與實機共用同一份全域常數） ----
+  function openTypes(){
+    const rows = Object.keys(COIN_TYPES).map(id => {
+      const t = COIN_TYPES[id];
+      const desc = id === 'normal' ? '平衡基線' : id === 'bouncy' ? '落軌反彈更強' : id === 'slick' ? '滾動減速更低' : '速度 ×0.92，岩塊偏轉減半';
+      const on = coinType === id;
+      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${t.n} <span class="v">${on ? '使用中' : ''}</span></div><div class="shopDesc">${desc}</div></div>${on ? '<button type="button" disabled>已選</button>' : `<button type="button" data-type="${id}">選擇</button>`}</div>`;
+    }).join('');
+    openPanel('金貨型態', rows);
+    $('panelBody').querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', () => {
+      coinType = b.dataset.type; saveJSON(COIN_TYPE_KEY, coinType); sfx.gem(); openTypes();
+    }));
+  }
+
+  // ---- v4 自訂種子（離線重現） ----
+  function openSeed(){
+    openPanel('自訂種子', `
+      <div class="panelRow"><span class="k">種子代碼</span></div>
+      <input id="seedInput" type="text" maxlength="24" value="${customSeed.replace(/"/g, '&quot;')}" placeholder="留空為隨機"
+        style="width:100%;min-height:40px;border-radius:8px;border:1px solid rgba(241,230,210,.25);background:rgba(255,255,255,.05);color:var(--fg);padding:0 12px;font-family:inherit;font-size:14px">
+      <div class="menuList" style="margin-top:10px">
+        <button id="seedSave" type="button">儲存種子</button>
+        <button id="seedClear" type="button" class="ghost">清除（回歸隨機）</button>
+      </div>`);
+    $('seedSave').addEventListener('click', () => {
+      const v = $('seedInput').value.trim();
+      customSeed = v; saveJSON(SEED_KEY, v); sfx.gem(); openMenu();
+    });
+    $('seedClear').addEventListener('click', () => { customSeed = ''; saveJSON(SEED_KEY, ''); sfx.ui(); openMenu(); });
+  }
+
+  // ---- v4.2 技能樹布局（邏輯座標；節點寬 150／高 76，樹寬高超出視口可平移） ----
+  const TREE_LAYOUT = {
+    root:       { cx: 490, y: 14  },
+    startPower: { cx: 185, y: 116 },
+    preview:    { cx: 95,  y: 224 },
+    boost:      { cx: 95,  y: 332 },
+    cutFast:    { cx: 275, y: 224 },
+    coin:       { cx: 490, y: 116 },
+    gemCap:     { cx: 490, y: 224 },
+    gemCoin:    { cx: 490, y: 332 },
+    light:      { cx: 765, y: 116 },
+    bossSlow:   { cx: 675, y: 224 },
+    guard:      { cx: 855, y: 224 }
+  };
+  const TREE_W = 980, TREE_H = 430, NODE_W = 160, NODE_H = 76;
+
+  // 實際節點 bbox（含半寬／節點高），縮放與平移邊界以此為準，避免固定 TREE_W 漏掉邊緣節點
+  function treeBBox(){
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const id in TREE_LAYOUT){
+      const p = TREE_LAYOUT[id];
+      minX = Math.min(minX, p.cx - NODE_W / 2);
+      maxX = Math.max(maxX, p.cx + NODE_W / 2);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y + NODE_H);
+    }
+    return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
+  }
+
+  function treeIcon(branch){
+    const stroke = 'currentColor';
+    if (branch === 'eco') return '<svg viewBox="0 0 22 22" width="18" height="18"><circle cx="11" cy="11" r="6" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+    if (branch === 'sur') return '<svg viewBox="0 0 22 22" width="18" height="18"><rect x="5" y="5" width="12" height="12" rx="2" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+    if (branch === 'root') return '<svg viewBox="0 0 22 22" width="18" height="18"><polygon points="11,3 18,7 18,15 11,19 4,15 4,7" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+    return '<svg viewBox="0 0 22 22" width="18" height="18"><rect x="7" y="7" width="8" height="8" transform="rotate(45 11 11)" fill="none" stroke="' + stroke + '" stroke-width="1.6"/></svg>';
+  }
+
+  // 節點狀態：maxed／locked（boost 前置）／poor（幣不足）／buyable；owned 表已投入等級
+  function treeState(id){
+    const def = UPGRADE_DEFS_BY_ID[id];
+    const lv = upg(id);
+    if (lv >= def.max) return 'maxed';
+    if (id === 'boost' && !previewUnlocked()) return 'locked';
+    const price = def.prices[lv];
+    if (coins < price) return 'poor';
+    return 'buyable';
+  }
+  function treeParentOwned(id){
+    const meta = TREE_BY_ID[id];
+    if (!meta || meta.parent === 'root') return true;
+    return upg(meta.parent) > 0;
+  }
+
+  function treeNodeHTML(id){
+    const def = UPGRADE_DEFS_BY_ID[id];
+    const meta = TREE_BY_ID[id];
+    const lv = upg(id);
+    const maxed = lv >= def.max;
+    const state = treeState(id);
+    const pos = TREE_LAYOUT[id];
+    const cls = ['treeNode'];
+    if (lv > 0) cls.push('owned');
+    cls.push(state);
+    if (!treeParentOwned(id) && lv === 0) cls.push('dim');
+    let act;
+    if (state === 'maxed') act = '滿級';
+    else if (state === 'locked') act = '需先解鎖輔助線';
+    else if (state === 'poor') act = '缺 ' + (def.prices[lv] - coins);
+    else act = def.prices[lv] + ' 幣';
+    const clickable = state === 'buyable';
+    const descText = state === 'locked' && def.id === 'boost' ? '弧取樣點最高 100' : upgDesc(def);
+    return `<div class="${cls.join(' ')}" ${clickable ? `data-buy="${id}"` : 'data-disabled="1"'} tabindex="0" role="button"
+      aria-label="${def.name} Lv ${lv}/${def.max} ${act}" style="left:${pos.cx - NODE_W / 2}px;top:${pos.y}px;width:${NODE_W}px;min-height:${NODE_H}px">
+      <div class="tnTop"><span class="tnIcon">${treeIcon(meta.branch)}</span><span class="tnName">${def.name}</span><span class="tnLv">Lv ${lv}/${def.max}</span></div>
+      <div class="tnDesc">${descText}</div>
+      <div class="tnAct">${act}</div>
+    </div>`;
+  }
+
+  function treeLinksSVG(){
+    const paths = TREE_NODES.map(n => {
+      const parent = TREE_LAYOUT[n.parent] || TREE_LAYOUT.root;
+      const child = TREE_LAYOUT[n.id];
+      const px = parent.cx, py = parent.y + NODE_H;
+      const cx = child.cx, cy = child.y;
+      const my = (py + cy) / 2;
+      const pOwned = n.parent === 'root' ? true : upg(n.parent) > 0;
+      const cOwned = upg(n.id) > 0;
+      let cls = 'linkGray';
+      if (pOwned && cOwned) cls = 'linkGold';
+      else if (pOwned) cls = 'linkFaint';
+      return `<path class="${cls}" d="M ${px} ${py} L ${px} ${my} L ${cx} ${my} L ${cx} ${cy}" fill="none"/>`;
+    }).join('');
+    return `<svg class="treeLinks" width="${TREE_W}" height="${TREE_H}" viewBox="0 0 ${TREE_W} ${TREE_H}">${paths}</svg>`;
+  }
+
+  // 套件／被動列（樹面板子分頁與舊入口共用）
+  function suiteRowsHTML(){
+    return SUITE_DEFS.map(s => {
+      const lv = suite[s.id] || 0;
+      const maxed = lv >= SUITE_MAX;
+      const price = maxed ? null : SUITE_PRICES[lv];
+      const afford = !maxed && coins >= price;
+      const btn = maxed ? '<button type="button" disabled>滿級</button>'
+        : afford ? `<button type="button" data-suite="${s.id}">${price} 幣</button>`
+        : `<button type="button" disabled>缺 ${price - coins}</button>`;
+      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${s.n} <span class="v">Lv ${lv}/${SUITE_MAX}</span></div><div class="shopDesc">${s.d}</div></div>${btn}</div>`;
+    }).join('');
+  }
+  function passiveRowsHTML(){
+    return PASSIVE_DEFS.map(p => {
+      const lv = passive[p.id] || 0;
+      const maxed = lv >= PASSIVE_MAX;
+      const price = maxed ? null : SUITE_PRICES[lv];
+      const afford = !maxed && coins >= price;
+      const btn = maxed ? '<button type="button" disabled>滿級</button>'
+        : afford ? `<button type="button" data-pass="${p.id}">${price} 幣</button>`
+        : `<button type="button" disabled>缺 ${price - coins}</button>`;
+      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${p.n} <span class="v">Lv ${lv}/${PASSIVE_MAX}</span></div><div class="shopDesc">${p.d}</div></div>${btn}</div>`;
+    }).join('');
+  }
+
+  let treeTab = 'tree';
+  function buyUpgrade(id){
+    if (shopLockT > 0) return;
+    const def = UPGRADE_DEFS_BY_ID[id];
+    const lv = upg(id);
+    if (lv >= def.max) return;
+    if (def.id === 'boost' && !previewUnlocked()) return;
+    const price = def.prices[lv];
+    if (coins < price) return;
+    coins -= price;
+    upgrades[id] = lv + 1;
+    if (UPGRADE_DEFS.every(d => upg(d.id) >= d.max)) unlock('upMax');
+    shopLockT = SHOP_BUY_LOCK;
+    saveJSON(COINS_KEY, coins);
+    saveJSON(UPG_KEY, upgrades);
+    sfx.gem();
+    openShop();
+  }
+  function buySuite(id){
+    const lv = suite[id];
+    if (lv >= SUITE_MAX) return;
+    const price = SUITE_PRICES[lv];
+    if (coins < price) return;
+    coins -= price; suite[id] = lv + 1;
+    saveJSON(COINS_KEY, coins); saveJSON(SUITE_KEY, suite);
+    sfx.gem(); openShop();
+  }
+  function buyPassive(id){
+    const lv = passive[id];
+    if (lv >= PASSIVE_MAX) return;
+    const price = SUITE_PRICES[lv];
+    if (coins < price) return;
+    coins -= price; passive[id] = lv + 1;
+    saveJSON(COINS_KEY, coins); saveJSON(PASSIVE_KEY, passive);
+    sfx.gem(); openShop();
+  }
+
+  // ---- v4.2 全屏技能樹面板（樹／永久套裝／被動槽同一面板子分頁） ----
+  function openShop(tab){
+    treeTab = tab || treeTab;
+    const root = TREE_LAYOUT.root;
+    const nodes = TREE_NODES.map(n => treeNodeHTML(n.id)).join('');
+    const html = `
+      <div class="treePanel">
+        <div class="treeTabs">
+          <button type="button" data-tab="tree" class="${treeTab === 'tree' ? 'on' : ''}">技能樹</button>
+          <button type="button" data-tab="suite" class="${treeTab === 'suite' ? 'on' : ''}">永久套裝</button>
+          <button type="button" data-tab="passive" class="${treeTab === 'passive' ? 'on' : ''}">被動槽</button>
+        </div>
+        <div class="treeCoin">目前金幣：<span>${coins}</span></div>
+        <div class="treeViewport" id="treeViewport">
+          <div class="treeCanvas" id="treeCanvas" style="width:${TREE_W}px;height:${TREE_H}px">
+            ${treeLinksSVG()}
+            <div class="treeRoot" style="left:${root.cx - 80}px;top:${root.y}px;width:160px">
+              <span class="tnIcon">${treeIcon('root')}</span>
+              <span class="tnName">${TREE_ROOT.name}</span>
+              <span class="tnDesc">研製各項工坊強化</span>
+            </div>
+            ${nodes}
+          </div>
+        </div>
+        <div class="subPanel ${treeTab === 'suite' ? '' : 'hidden'}" id="suitePanel">${suiteRowsHTML()}</div>
+        <div class="subPanel ${treeTab === 'passive' ? '' : 'hidden'}" id="passivePanel">${passiveRowsHTML()}</div>
+        <div class="treeHint" id="treeHint">拖動平移技能樹；節點顯示等級、價格與前置條件</div>
+      </div>`;
+    openPanel('技能樹', html);
+    $('panel').classList.add('treeFull');
+    $('overlay').classList.add('treeFull');
+    $('game').classList.add('treeFull');
+    wireTreePanel();
+  }
+
+  function wireTreePanel(){
+    const body = $('panelBody');
+    body.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+      treeTab = b.dataset.tab; sfx.ui(); openShop(treeTab);
+    }));
+    body.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => buyUpgrade(b.dataset.buy)));
+    body.querySelectorAll('[data-suite]').forEach(b => b.addEventListener('click', () => buySuite(b.dataset.suite)));
+    body.querySelectorAll('[data-pass]').forEach(b => b.addEventListener('click', () => buyPassive(b.dataset.pass)));
+    // 鍵盤：Enter／Space 觸發可購買節點
+    body.querySelectorAll('.treeNode[data-buy]').forEach(n => n.addEventListener('keydown', e => {
+      if (e.code === 'Enter' || e.code === 'Space'){ e.preventDefault(); buyUpgrade(n.dataset.buy); }
+    }));
+    wireTreePan();
+  }
+
+  // 樹平移：觸控拖動／滑鼠拖動／滾輪；初始自動縮放至視口，輕量邊界回彈
+  let pan = { x: 0, y: 0 }, panScale = 1, panActive = false, panMoved = false, panLast = null;
+  function fitScale(){
+    const vp = $('treeViewport');
+    if (!vp || !vp.clientWidth) return 1;
+    const bb = treeBBox();
+    const pad = 12;
+    return Math.min(1, (vp.clientWidth - pad * 2) / bb.w, (vp.clientHeight - pad * 2) / bb.h);
+  }
+  function applyPan(){
+    const cv = $('treeCanvas');
+    if (cv) cv.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${panScale})`;
+  }
+  function clampPan(){
+    const vp = $('treeViewport');
+    if (!vp) return;
+    const bb = treeBBox();
+    const w = bb.w * panScale, h = bb.h * panScale;
+    if (w <= vp.clientWidth){
+      pan.x = (vp.clientWidth - w) / 2 - bb.minX * panScale;
+    } else {
+      pan.x = Math.max(-bb.minX * panScale, Math.min(vp.clientWidth - bb.maxX * panScale, pan.x));
+    }
+    if (h <= vp.clientHeight){
+      pan.y = (vp.clientHeight - h) / 2 - bb.minY * panScale;
+    } else {
+      pan.y = Math.max(-bb.minY * panScale, Math.min(vp.clientHeight - bb.maxY * panScale, pan.y));
+    }
+  }
+  function wireTreePan(){
+    const vp = $('treeViewport');
+    if (!vp) return;
+    panScale = fitScale();
+    pan = { x: 0, y: 0 };
+    clampPan(); applyPan();
+    const onDown = (x, y) => { panActive = true; panMoved = false; panLast = { x, y }; vp.classList.add('dragging'); };
+    const onMove = (x, y) => {
+      if (!panActive || !panLast) return;
+      const dx = x - panLast.x, dy = y - panLast.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) panMoved = true;
+      pan.x += dx; pan.y += dy; panLast = { x, y }; clampPan(); applyPan();
+    };
+    const onUp = () => { panActive = false; panLast = null; vp.classList.remove('dragging'); };
+    vp.addEventListener('pointerdown', e => { if (e.target.closest('[data-buy]')) return; onDown(e.clientX, e.clientY); });
+    vp.addEventListener('pointermove', e => onMove(e.clientX, e.clientY));
+    addEventListener('pointerup', onUp);
+    vp.addEventListener('wheel', e => { e.preventDefault(); pan.x -= e.deltaX; pan.y -= e.deltaY; clampPan(); applyPan(); }, { passive: false });
+    vp.addEventListener('click', e => { if (panMoved){ e.stopPropagation(); e.preventDefault(); } }, true);
+  }
+
+
+  // ---- v3 重置進度：清 best／統計／圖鑑／成就／金幣／升級，保留音效與顯示開關 ----
+  function resetProgress(){
+    best = 0; saveBest();
+    stats = { runs: 0, deepest: 0, arenas: 0, bosses: 0, segments: 0, coinTotal: 0 };
+    saveJSON(STATS_KEY, stats);
+    codex = new Set(); saveJSON(CODEX_KEY, []);
+    ach = new Set(); saveJSON(ACH_KEY, []);
+    coins = 0; saveJSON(COINS_KEY, coins);
+    upgrades = Object.assign({}, UPG_DEFAULTS);
+    saveJSON(UPG_KEY, upgrades);
+    lastPowers = [];
+    reset();
+  }
+
+  function openCodex(){
+    const groups = [['terrain', '地形'], ['event', '事件樓層'], ['boss', 'Boss'], ['modifier', '修飾詞'], ['mech', '機關'], ['item', '道具'], ['relic', '遺跡房']];
+    const html = groups.map(([g, label]) => `
+      <div class="panelRow"><span class="k">${label}</span></div>
+      <div class="codexGrid">${CODEX[g].map(e => {
+        const known = codex.has(g + ':' + e.k);
+        return `<div class="codexItem ${known ? '' : 'unknown'}"><div class="n">${known ? e.n : '？'}</div><div class="d">${known ? e.d : '尚未遇過'}</div></div>`;
+      }).join('')}</div>`).join('');
+    openPanel('圖鑑', html);
+  }
+
+  function openStats(){
+    const avg = lastPowers.length ? Math.round(lastPowers.reduce((a, b) => a + b, 0) / lastPowers.length * 100) + '%' : '—';
+    const rows = [
+      ['最深紀錄', 'B' + stats.deepest],
+      ['總局數', stats.runs],
+      ['通過競技場', stats.arenas],
+      ['擊破 Boss', stats.bosses],
+      ['累計段數', stats.segments],
+      ['最近 20 段平均力道', avg]
+    ];
+    openPanel('統計', rows.map(([k, v]) => `<div class="panelRow"><span class="k">${k}</span><span>${v}</span></div>`).join(''));
+  }
+
+  function openAch(){
+    const html = ACHS.map(a => {
+      const cur = achProgress(a.id), done = ach.has(a.id);
+      const prog = a.target > 1 ? '　' + Math.min(cur, a.target) + '/' + a.target : '';
+      return `<div class="achRow"><div class="achDot ${done ? 'on' : ''}"></div>
+      <div><div class="t">${a.n}</div><div class="d">${a.d}${prog}</div></div></div>`;
+    }).join('');
+    openPanel('成就', html);
+  }
+
+  // ---- v4 排行榜／被動槽／永久套裝／遺跡商店（內容於後續批次補齊） ----
+  function openLeader(){
+    const rows = [
+      ['最深樓層', 'B' + Math.max(leader.deepest, stats.deepest)],
+      ['最速抵 B20', leader.fastestB20 > 0 ? leader.fastestB20.toFixed(1) + 's' : '—'],
+      ['Boss Rush 場次', leader.rushWins]
+    ];
+    openPanel('排行榜', rows.map(([k, v]) => `<div class="panelRow"><span class="k">${k}</span><span>${v}</span></div>`).join(''));
+  }
+  function openTasks(){
+    const rows = dailyTasks.list.map(t => {
+      const def = TASK_DEFS.find(x => x.id === t.id);
+      const prog = Math.min(t.prog, def.target);
+      let btn;
+      if (t.claimed) btn = '<button type="button" disabled>已領</button>';
+      else if (t.done) btn = `<button type="button" data-claim="${t.id}">${def.coin} 幣</button>`;
+      else btn = `<button type="button" disabled>${prog}/${def.target}</button>`;
+      return `<div class="shopRow"><div class="shopMain"><div class="shopName">${def.n}</div></div>${btn}</div>`;
+    }).join('');
+    openPanel('每日委託', rows);
+    $('panelBody').querySelectorAll('[data-claim]').forEach(b => b.addEventListener('click', () => {
+      const t = dailyTasks.list.find(x => x.id === b.dataset.claim);
+      const def = TASK_DEFS.find(x => x.id === t.id);
+      if (!t || t.claimed || !t.done) return;
+      t.claimed = true;
+      coins = Math.min(1e9, coins + def.coin); stats.coinTotal = safeCount(stats.coinTotal + def.coin, 0);
+      saveJSON(COINS_KEY, coins); saveJSON(DAILY_TASK_KEY, dailyTasks);
+      sfx.gem(); openTasks();
+    }));
+  }
+  // 被動槽／永久套裝：與技能樹同一全屏面板的子分頁（不另開重複清單）
+  function openPassive(){ openShop('passive'); }
+  function openSuite(){ openShop('suite'); }
+  function openSink(){
+    const canReroll = rerollUsed < REROLL_PER_RUN;
+    const bagBtn = coins >= BAG_PRICE
+      ? `<button type="button" data-bag>${BAG_PRICE} 幣</button>`
+      : `<button type="button" disabled>缺 ${BAG_PRICE - coins}</button>`;
+    const rerollBtn = !canReroll ? '<button type="button" disabled>本局已用</button>'
+      : coins >= REROLL_PRICE ? `<button type="button" data-reroll>${REROLL_PRICE} 幣</button>`
+      : `<button type="button" disabled>缺 ${REROLL_PRICE - coins}</button>`;
+    openPanel('遺跡商店', `
+      <div class="shopCoins">目前金幣：<span>${coins}</span></div>
+      <div class="shopRow"><div class="shopMain"><div class="shopName">道具福袋</div><div class="shopDesc">隨機取得護盾／鑽頭／磁石一顆（上限 3）</div></div>${bagBtn}</div>
+      <div class="shopRow"><div class="shopMain"><div class="shopName">重 roll 修飾詞</div><div class="shopDesc">重新擲骰本局修飾詞，每局 ${REROLL_PER_RUN} 次</div></div>${rerollBtn}</div>`);
+    $('panelBody').querySelectorAll('[data-bag]').forEach(b => b.addEventListener('click', () => {
+      if (coins < BAG_PRICE) return;
+      const keys = Object.keys(BAG_WEIGHT);
+      let acc = 0, r = rngFn() * keys.reduce((s, k) => s + BAG_WEIGHT[k], 0), pick = keys[0];
+      for (const k of keys){ acc += BAG_WEIGHT[k]; if (r < acc){ pick = k; break; } }
+      if (inv[pick] >= ITEM_DEFS[pick].max){ toastText = ITEM_DEFS[pick].n + ' 已達上限'; toastT = 0; return; }
+      coins -= BAG_PRICE; inv[pick]++;
+      saveJSON(COINS_KEY, coins); sfx.gem(); openSink();
+    }));
+    $('panelBody').querySelectorAll('[data-reroll]').forEach(b => b.addEventListener('click', () => {
+      if (rerollUsed >= REROLL_PER_RUN || coins < REROLL_PRICE) return;
+      coins -= REROLL_PRICE; rerollUsed++;
+      mod = rollModifier();
+      if (mod !== 'calm') discover('modifier', mod);
+      saveJSON(COINS_KEY, coins); sfx.modEnter(); openSink();
+    }));
+  }
+
+  function openHelp(){
+    openPanel('說明', `
+      <div class="panelRow"><span class="k">目標</span></div>
+      <div>拉動拉桿彈出金貨，越過軌道切縫落到下一段，一路深入地底；落入洞穴或被 Boss 追上即結束。</div>
+      <div class="panelRow"><span class="k">操作</span></div>
+      <div>按住畫面任意處（或空白鍵、下方向鍵）蓄力，放開彈射；拉滿約需一秒。力道過大會飛進遠側洞穴，過弱則在途中穴前失速。</div>
+      <div class="panelRow"><span class="k">樓層</span></div>
+      <div>每五層為寶藏層，寶石可提升蓄力速度；每十層為 Boss 競技場，通過十段擊破 Boss。幽暗、岩陣、結晶、回聲等特殊樓層會隨機出現。</div>
+      <div class="panelRow"><span class="k">金幣與升級</span></div>
+      <div>推進新段可賺金幣，競技場整場通過另有獎勵；可在選單「升級」花幣強化輔助線、金幣加成、開局力道、寶石上限、Boss 減速與照明。升級僅影響本局以上項目，不改變軌道物理。</div>
+      <div class="panelRow"><span class="k">道具與二段蓄力</span></div>
+      <div>數字鍵 1／2／3 使用護盾、鑽頭、磁石（自動模式不使用）；護盾擋一次落穴或追擊，鑽頭鑽破可破壞岩，磁石吸附半徑內寶石。空中可再按一次蓄力鍵補一次推力（每飛行一次、每局兩次）。</div>
+      <div class="panelRow"><span class="k">被動槽</span></div>
+      <div>跨局保留的輔助：彈簧靴每級提升手動發射初速 3%；油壺每 2 級增加一次二段蓄力；護甲片每級開局 +1 護盾。被動僅作用於手動發射與開局狀態，不影響軌道物理與自動試算。</div>
+      <div class="panelRow"><span class="k">機關與金貨型態</span></div>
+      <div>冰面減速更低、風場推進、緩衝墊接住墜落；移動平台、傳送門、旋槳為僅手動機關，自動模式降級為一般段。金貨型態在選單切換：標準／彈跳／滑順／重型。</div>
+      <div class="panelRow"><span class="k">遺跡岔路</span></div>
+      <div>每 8 層一岔：到岔點點擊左側（3 顆寶石）或右側（25 金幣＋隨機道具），選定後封閉另一側；自動模式預設走左。</div>
+      <div class="panelRow"><span class="k">模式與委託</span></div>
+      <div>Boss Rush 連戰連勝；限時衝刺在倒數歸零前盡量深入；殘局挑戰由種子重現。每日三項委託可領金幣，排行榜記錄最深、最速抵 B20 與 Rush 連勝。</div>
+      <div class="panelRow"><span class="k">版本</span></div>
+      <div>${VERSION_TAG}</div>
+      <div class="menuList" style="margin-top:10px"><button id="replayTut" type="button">重看教學</button></div>`);
+    $('replayTut').addEventListener('click', () => {
+      closePanel();
+      $('tutorial').classList.remove('hidden');
+    });
+  }
+
+  // ================= 輸入 =================
+  let activePointer = null;
+  function releaseAll(){ activePointer = null; charging = false; chargeSource = null; power = 0; }
+
+  function relicPending(){ const lv = levels[here]; return !!(lv && lv.relic && !lv.relic.branch); }
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    ensureAudio();
+    if (panelOpen() || state === 'over' || activePointer !== null) return;
+    if (relicPending()){
+      const rect = cv.getBoundingClientRect();
+      chooseRelic((e.clientX - rect.left) < rect.width / 2 ? 'left' : 'right');
+      return;
+    }
+    activePointer = e.pointerId;
+    try { cv.setPointerCapture(e.pointerId); } catch(err) {}
+    if (atLever(here)){ chargeSource = 'pointer'; startCharge(true); }
+    else dashBoost();
+  });
+  const release = e => {
+    if (e.pointerId !== activePointer) return;
+    activePointer = null;
+    if (chargeSource === 'pointer') flick();
+  };
+  document.addEventListener('pointerup', release);
+  document.addEventListener('pointercancel', release);
+  addEventListener('blur', releaseAll);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
+  addEventListener('popstate', () => { if (panelOpen()) closePanel(); });
+
+  const isGameKey = e => e.code === 'Space' || e.code === 'ArrowDown';
+  addEventListener('keydown', e => {
+    if (e.code === 'Escape'){ closePanel(); $('tutorial').classList.add('hidden'); return; }
+    if (e.code === 'KeyM'){ openMenu(); return; }
+    if (!panelOpen() && state === 'play' && relicPending() && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')){
+      chooseRelic(e.code === 'ArrowLeft' ? 'left' : 'right'); return;
+    }
+    if (e.code === 'KeyR' && state === 'over'){ sfx.ui(); reset(); return; }
+    // v4 道具快捷鍵 1/2/3
+    if (!panelOpen() && state === 'play' && ['Digit1','Digit2','Digit3'].includes(e.code)){
+      useItem({ Digit1: 'shield', Digit2: 'drill', Digit3: 'magnet' }[e.code]); return;
+    }
+    if (e.code === 'Tab' && panelOpen()){
+      e.preventDefault();
+      const f = [...document.querySelectorAll('#panel button, #panel [tabindex]:not([tabindex="-1"])')];
+      if (!f.length) return;
+      const idx = f.indexOf(document.activeElement);
+      const next = e.shiftKey ? (idx <= 0 ? f.length - 1 : idx - 1) : (idx === f.length - 1 || idx < 0 ? 0 : idx + 1);
+      f[next].focus();
+      return;
+    }
+    if (panelOpen() || state === 'over' || !isGameKey(e)) return;
+    e.preventDefault();
+    ensureAudio();
+    if (e.repeat) return;
+    if (atLever(here)){ chargeSource = 'key'; startCharge(true); }
+    else dashBoost();
+  });
+  addEventListener('keyup', e => {
+    if (!isGameKey(e)) return;
+    if (chargeSource === 'key') flick();
+  });
+
+  document.addEventListener('touchstart', e => { if (e.target === cv) e.preventDefault(); }, {passive:false});
+  document.addEventListener('touchmove', e => { if (activePointer !== null) e.preventDefault(); }, {passive:false});
+  document.addEventListener('selectstart', e => e.preventDefault());
+  document.addEventListener('contextmenu', e => { if (e.target === cv) e.preventDefault(); });
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    const onButton = e.target instanceof Element && e.target.closest('button');
+    if (!onButton && now - lastTouchEnd < 350) e.preventDefault();
+    lastTouchEnd = now;
+  }, {passive:false});
+
+  // ================= 按鈕與分享 =================
+  const autoBtn = $('autoBtn');
+  $('retry').addEventListener('pointerdown', e => e.stopPropagation());
+  $('retry').addEventListener('click', () => { sfx.ui(); reset(); });
+
+  autoBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  autoBtn.addEventListener('click', () => {
+    auto = !auto;
+    autoRetryT = 0;
+    if (!auto && charging) flick();
+    autoBtn.textContent = auto ? '自動: ON' : '自動: OFF';
+    autoBtn.classList.toggle('on', auto);
+  });
+
+  $('menuBtn').addEventListener('pointerdown', e => e.stopPropagation());
+  $('menuBtn').addEventListener('click', openMenu);
+  $('menuOpen').addEventListener('pointerdown', e => e.stopPropagation());
+  $('menuOpen').addEventListener('click', openMenu);
+  $('panelClose').addEventListener('click', closePanel);
+  $('overlay').addEventListener('pointerdown', e => { if (e.target === $('overlay')) closePanel(); });
+
+  $('tutorial').addEventListener('pointerdown', () => {
+    $('tutorial').classList.add('hidden');
+    tutorialDone = true;
+    saveJSON('endlessShinkansen.tutorialDone', true);
+  });
+
+  function shareText(){
+    return '地底レバー　抵達 ' + floorInfo(here).main + '！\n'
+      + location.href.split(/[?#]/)[0] + '\n#地底レバー';
+  }
+  function resultImageFile(){
+    const c = document.createElement('canvas');
+    c.width = 800; c.height = 420;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, c.height);
+    grad.addColorStop(0, col.rock1); grad.addColorStop(1, col.rock4);
+    g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = col.fg; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 40px ' + FONT;
+    g.fillText('地底レバー', 400, 100);
+    g.font = 'bold 84px ' + FONT;
+    g.fillText(floorInfo(here).main, 400, 250);
+    g.font = '16px ' + FONT;
+    g.textAlign = 'left';
+    g.fillText(VERSION_TAG, 24, 392);
+    const bin = atob(c.toDataURL('image/png').split(',')[1]);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return new File([buf], 'result.png', { type: 'image/png' });
+  }
+  $('share').addEventListener('pointerdown', e => e.stopPropagation());
+  $('share').addEventListener('click', () => {
+    const btn = $('share');
+    const text = shareText();
+    const file = resultImageFile();
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ text, files: [file] }).catch(() => {});
+      return;
+    }
+    if (navigator.share){
+      navigator.share({ text }).catch(() => {});
+      return;
+    }
+    navigator.clipboard?.writeText(text).then(() => {
+      btn.textContent = '已複製';
+      setTimeout(() => { btn.textContent = '分享'; }, 1500);
+    }).catch(() => {});
+  });
+
+  // ================= 開始 =================
+  resize();
+  buildSideFrame();
+  addEventListener('resize', resize);
+  $('tutVer').textContent = VERSION_TAG;
+  reset();
+  if (!tutorialDone) $('tutorial').classList.remove('hidden');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
