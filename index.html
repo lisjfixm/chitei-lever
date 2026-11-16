@@ -4,7 +4,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>地底レバー</title>
+<title>地底拉桿</title>
 <meta name="description" content="拉動拉桿彈出金貨，沿軌道一路深入地底的單檔休閒遊戲">
 <style>
   :root{
@@ -257,8 +257,8 @@
   const $ = id => document.getElementById(id);
 
   // ================= 常數區（所有可調數值集中於此） =================
-  const VERSION = '4.2';                  // 版本號，顯示於說明／結算／結果圖
-  const VERSION_TAG = 'v4.2 遺跡工坊';    // 副標
+  const VERSION = '4.3';                  // 版本號，顯示於說明／結算／結果圖
+  const VERSION_TAG = 'v4.3 遺跡工坊';    // 副標
 
   // ---- 既有物理常數（語意不得更動） ----
   const BOARD_W = 320;        // 盤面內側寬度（盤面單位，隨畫面縮放）
@@ -3859,8 +3859,8 @@
   });
 
   function shareText(){
-    return '地底レバー　抵達 ' + floorInfo(here).main + '！\n'
-      + location.href.split(/[?#]/)[0] + '\n#地底レバー';
+    return '地底拉桿　抵達 ' + floorInfo(here).main + '！\n'
+      + location.href.split(/[?#]/)[0] + '\n#地底拉桿';
   }
   function resultImageFile(){
     const c = document.createElement('canvas');
@@ -3871,7 +3871,7 @@
     g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
     g.fillStyle = col.fg; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = 'bold 40px ' + FONT;
-    g.fillText('地底レバー', 400, 100);
+    g.fillText('地底拉桿', 400, 100);
     g.font = 'bold 84px ' + FONT;
     g.fillText(floorInfo(here).main, 400, 250);
     g.font = '16px ' + FONT;
