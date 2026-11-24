@@ -257,8 +257,8 @@
   const $ = id => document.getElementById(id);
 
   // ================= 常數區（所有可調數值集中於此） =================
-  const VERSION = '4.3';                  // 版本號，顯示於說明／結算／結果圖
-  const VERSION_TAG = 'v4.3 遺跡工坊';    // 副標
+  const VERSION = '4.4';                  // 版本號，顯示於說明／結算／結果圖
+  const VERSION_TAG = 'v4.4 加固巡檢';    // 副標
 
   // ---- 既有物理常數（語意不得更動） ----
   const BOARD_W = 320;        // 盤面內側寬度（盤面單位，隨畫面縮放）
@@ -629,7 +629,7 @@
 
   // ---- 存檔 ----
   function loadJSON(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
-  function saveJSON(key, v){ try{ if (key === COINS_KEY) v = Math.max(0, Math.min(1e9, Math.floor(Number(v) || 0))); localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
+  function saveJSON(key, v){ try{ if (key === COINS_KEY) v = clampCoins(v); localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
   // B9：型別檢查＋範圍夾制；NaN／null／空字串視同缺，損毀只丟失該鍵
   function safeNum(v, dflt){ const n = parseInt(v); return Number.isFinite(n) && n >= 0 ? n : (dflt || 0); }
   function safeStr(v, dflt){ return typeof v === 'string' && v.trim() !== '' ? v : dflt; }
@@ -637,6 +637,8 @@
   function safeArr(v){ return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; }
   // O5：計數類欄位同 coins 口徑，有限且 ≥0 後夾到 1e9
   function safeCount(v, dflt){ const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(1e9, Math.floor(n)) : (dflt || 0); }
+  // 金幣記憶體值一致夾制：下限 0、上限 1e9，寫檔前後同一口徑
+  function clampCoins(n){ return Math.max(0, Math.min(1e9, Math.floor(Number(n) || 0))); }
 
   let best = 0;
   try { best = parseInt(localStorage.getItem(BEST_KEY)) || 0; } catch(e) {}
@@ -1518,7 +1520,8 @@
     charging = false;
     chargeSource = null;
     if (boss && boss.mode === 'cut'){ power = 0; return; }
-    if (state === 'play' && atLever(here)){
+    if (panelOpen() || state !== 'play'){ power = 0; return; }  // 面板暫停／非遊玩態不發射
+    if (atLever(here)){
       // 彈簧靴初速加成僅作用於手動發射；自動／trial／預覽路徑不套用，保持物理純淨
       const isManual = chargeSource === 'pointer' || chargeSource === 'key';
       const launchPower = isManual ? Math.min(1, power * springLaunchMult()) : power;
@@ -1670,7 +1673,7 @@
         arenaPaid.add(here);
         const clearMult = coinMult() * MOD_DEFS[mod].coin * (dailyMode ? DAILY_COIN_MULT : 1);
         const clearAmt = Math.max(1, Math.round(COIN_ARENA_CLEAR * clearMult));
-        coins += clearAmt; stats.coinTotal = safeCount(stats.coinTotal + clearAmt, 0);
+        coins = clampCoins(coins + clearAmt); stats.coinTotal = safeCount(stats.coinTotal + clearAmt, 0);
         if (stats.coinTotal >= 500) unlock('coin500');
         if (stats.coinTotal >= 2000) unlock('coin2000');
         saveJSON(COINS_KEY, coins);
@@ -1723,7 +1726,9 @@
   function collideRail(c, sg, h, decelMult){
     const def = coinTypeDef();
     const ax = sg.a.x, ay = sg.a.y, dx = sg.b.x - ax, dy = sg.b.y - ay;
-    let u = ((c.x - ax) * dx + (c.y - ay) * dy) / (dx * dx + dy * dy);
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) return;  // 退化段守衛：避免除零產生 NaN 法線
+    let u = ((c.x - ax) * dx + (c.y - ay) * dy) / len2;
     const corner = u <= 0 || u >= 1;
     u = Math.max(0, Math.min(1, u));
     const qx = ax + u * dx, qy = ay + u * dy;
@@ -1767,7 +1772,9 @@
     let best = null, bd = Infinity;
     for (const sg of lv.segs){
       const ax = sg.a.x, ay = sg.a.y, dx = sg.b.x - ax, dy = sg.b.y - ay;
-      const u = Math.max(0, Math.min(1, ((c.x - ax) * dx + (c.y - ay) * dy) / (dx * dx + dy * dy)));
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-12) continue;  // 退化段守衛
+      const u = Math.max(0, Math.min(1, ((c.x - ax) * dx + (c.y - ay) * dy) / len2));
       const qx = ax + u * dx, qy = ay + u * dy;
       const d = Math.hypot(c.x - qx, c.y - qy);
       if (d < bd){ bd = d; best = sg; }
@@ -1962,7 +1969,7 @@
     }
     const mult = coinMult() * MOD_DEFS[mod].coin * (dailyMode ? DAILY_COIN_MULT : 1);
     amount = Math.max(1, Math.round(amount * mult));
-    coins = Math.min(1e9, coins + amount);
+    coins = clampCoins(coins + amount);
     stats.coinTotal = safeCount(stats.coinTotal + amount, 0);
     if (stats.coinTotal >= 500) unlock('coin500');
     if (stats.coinTotal >= 2000) unlock('coin2000');
@@ -2020,7 +2027,7 @@
       }
       showBanner('遺跡房：寶石區');
     } else {
-      coins += RELIC_COINS; stats.coinTotal = safeCount(stats.coinTotal + RELIC_COINS, 0); saveJSON(COINS_KEY, coins);
+      coins = clampCoins(coins + RELIC_COINS); stats.coinTotal = safeCount(stats.coinTotal + RELIC_COINS, 0); saveJSON(COINS_KEY, coins);
       if (inv[lv.relic.item] < ITEM_DEFS[lv.relic.item].max) inv[lv.relic.item]++;
       showBanner('遺跡房：金幣＋道具');
     }
@@ -2044,7 +2051,7 @@
       const val = gemCoinValue();
       if (left > 0 && val > 0){
         const c = left * val;
-        coins += c; stats.coinTotal = safeCount(stats.coinTotal + c, 0); saveJSON(COINS_KEY, coins);
+        coins = clampCoins(coins + c); stats.coinTotal = safeCount(stats.coinTotal + c, 0); saveJSON(COINS_KEY, coins);
       }
     }
 
@@ -2146,6 +2153,11 @@
           acc -= STEP;
           const wasOnRail = !!coin.onRail;
           const e = simStep(coin, here, STEP, true);
+          if (!Number.isFinite(coin.x) || !Number.isFinite(coin.y) || !Number.isFinite(coin.vx) || !Number.isFinite(coin.vy)){
+            // NaN／無限守衛：實機路徑異常狀態回該段拉桿前，避免異常值擴散至碰撞與繪圖
+            placeAt(here); charging = false; chargeSource = null; power = 0; acc = 0;
+            continue;
+          }
           if (coin.onRail && !wasOnRail && clock - lastLandSfx >= LAND_SFX_GAP){
             sfx.land(); addShake(LAND_SHAKE_MAG, LAND_SHAKE_TIME); lastLandSfx = clock;
           }
@@ -2190,7 +2202,7 @@
           boss.level = Math.max(0, here - 1);
           const blv = levels[boss.level];
           const tLeft = Math.max(0.2, segTime * (1 - boss.progress));
-          const gapD = blv.gapPos;
+          const gapD = blv ? blv.gapPos : BOARD_W / 2;  // 關卡缺項守衛
           const speed = Math.max(6, Math.min(150, gapD / tLeft)) * boss.speedMult;
           if (!boss.dropping){
             const dir = gapD > boss.d ? 1 : -1;
@@ -2199,22 +2211,23 @@
             if (boss.progress > 0.8 && Math.abs(boss.d - gapD) < BOSS_R){
               boss.dropping = true; boss.dropT = 0;
               boss.fromY = railY(blv, boss.d);
-              const nl = levels[Math.min(maxLv, here)];
-              boss.toY = railY(nl, nl.gapPos);
+              const nl = levels[Math.min(maxLv, here)] || blv;
+              boss.toY = nl ? railY(nl, nl.gapPos) : railY(blv, boss.d);
             }
           } else {
             boss.dropT += dt;
             if (boss.dropT >= BOSS_DROP_TIME){
               boss.dropping = false;
               boss.level = Math.min(maxLv, here);
-              boss.d = levels[boss.level].gapPos;
+              const dlv = levels[boss.level] || blv;
+              boss.d = dlv ? dlv.gapPos : boss.d;
             }
           }
-          const lv = levels[boss.level];
+          const lv = levels[boss.level] || blv;
           const ry = boss.dropping
             ? boss.fromY + (boss.toY - boss.fromY) * Math.min(1, boss.dropT / BOSS_DROP_TIME)
             : railY(lv, boss.d);
-          boss.x = lv.side < 0 ? boss.d : BOARD_W - boss.d;
+          boss.x = (lv && lv.side) < 0 ? boss.d : BOARD_W - boss.d;
           boss.y = ry - BOSS_R;
           boss.close = Math.max(0, Math.min(1, 1 - Math.hypot(boss.x - coin.x, boss.y - coin.y) / (BOARD_W * 1.6)));
           if (boss.progress >= 1){
@@ -3229,6 +3242,8 @@
     $('panel').classList.remove('treeFull');
     $('overlay').classList.remove('treeFull');
     $('game').classList.remove('treeFull');
+    if (treePanUp){ removeEventListener('pointerup', treePanUp); treePanUp = null; }
+    panActive = false; panLast = null;
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
 
@@ -3487,7 +3502,7 @@
     if (def.id === 'boost' && !previewUnlocked()) return;
     const price = def.prices[lv];
     if (coins < price) return;
-    coins -= price;
+    coins = clampCoins(coins - price);
     upgrades[id] = lv + 1;
     if (UPGRADE_DEFS.every(d => upg(d.id) >= d.max)) unlock('upMax');
     shopLockT = SHOP_BUY_LOCK;
@@ -3501,7 +3516,7 @@
     if (lv >= SUITE_MAX) return;
     const price = SUITE_PRICES[lv];
     if (coins < price) return;
-    coins -= price; suite[id] = lv + 1;
+    coins = clampCoins(coins - price); suite[id] = lv + 1;
     saveJSON(COINS_KEY, coins); saveJSON(SUITE_KEY, suite);
     sfx.gem(); openShop();
   }
@@ -3510,7 +3525,7 @@
     if (lv >= PASSIVE_MAX) return;
     const price = SUITE_PRICES[lv];
     if (coins < price) return;
-    coins -= price; passive[id] = lv + 1;
+    coins = clampCoins(coins - price); passive[id] = lv + 1;
     saveJSON(COINS_KEY, coins); saveJSON(PASSIVE_KEY, passive);
     sfx.gem(); openShop();
   }
@@ -3567,6 +3582,7 @@
 
   // 樹平移：觸控拖動／滑鼠拖動／滾輪；初始自動縮放至視口，輕量邊界回彈
   let pan = { x: 0, y: 0 }, panScale = 1, panActive = false, panMoved = false, panLast = null;
+  let treePanUp = null;  // 樹面板全域 pointerup 引用，重綁前先移除避免監聽累積
   function fitScale(){
     const vp = $('treeViewport');
     if (!vp || !vp.clientWidth) return 1;
@@ -3597,6 +3613,7 @@
   function wireTreePan(){
     const vp = $('treeViewport');
     if (!vp) return;
+    if (treePanUp){ removeEventListener('pointerup', treePanUp); treePanUp = null; }
     panScale = fitScale();
     pan = { x: 0, y: 0 };
     clampPan(); applyPan();
@@ -3610,7 +3627,8 @@
     const onUp = () => { panActive = false; panLast = null; vp.classList.remove('dragging'); };
     vp.addEventListener('pointerdown', e => { if (e.target.closest('[data-buy]')) return; onDown(e.clientX, e.clientY); });
     vp.addEventListener('pointermove', e => onMove(e.clientX, e.clientY));
-    addEventListener('pointerup', onUp);
+    treePanUp = onUp;
+    addEventListener('pointerup', treePanUp);
     vp.addEventListener('wheel', e => { e.preventDefault(); pan.x -= e.deltaX; pan.y -= e.deltaY; clampPan(); applyPan(); }, { passive: false });
     vp.addEventListener('click', e => { if (panMoved){ e.stopPropagation(); e.preventDefault(); } }, true);
   }
@@ -3689,7 +3707,7 @@
       const def = TASK_DEFS.find(x => x.id === t.id);
       if (!t || t.claimed || !t.done) return;
       t.claimed = true;
-      coins = Math.min(1e9, coins + def.coin); stats.coinTotal = safeCount(stats.coinTotal + def.coin, 0);
+      coins = clampCoins(coins + def.coin); stats.coinTotal = safeCount(stats.coinTotal + def.coin, 0);
       saveJSON(COINS_KEY, coins); saveJSON(DAILY_TASK_KEY, dailyTasks);
       sfx.gem(); openTasks();
     }));
@@ -3715,12 +3733,12 @@
       let acc = 0, r = rngFn() * keys.reduce((s, k) => s + BAG_WEIGHT[k], 0), pick = keys[0];
       for (const k of keys){ acc += BAG_WEIGHT[k]; if (r < acc){ pick = k; break; } }
       if (inv[pick] >= ITEM_DEFS[pick].max){ toastText = ITEM_DEFS[pick].n + ' 已達上限'; toastT = 0; return; }
-      coins -= BAG_PRICE; inv[pick]++;
+      coins = clampCoins(coins - BAG_PRICE); inv[pick]++;
       saveJSON(COINS_KEY, coins); sfx.gem(); openSink();
     }));
     $('panelBody').querySelectorAll('[data-reroll]').forEach(b => b.addEventListener('click', () => {
       if (rerollUsed >= REROLL_PER_RUN || coins < REROLL_PRICE) return;
-      coins -= REROLL_PRICE; rerollUsed++;
+      coins = clampCoins(coins - REROLL_PRICE); rerollUsed++;
       mod = rollModifier();
       if (mod !== 'calm') discover('modifier', mod);
       saveJSON(COINS_KEY, coins); sfx.modEnter(); openSink();
